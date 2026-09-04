@@ -1,0 +1,7 @@
+.superpowers/
+.claude/
+node_modules/
+.env
+.env*.local
+.vercel/
+.next/
