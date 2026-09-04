@@ -7,12 +7,110 @@
  *      photo uploaded through Payload's Local API (which round-trips through the
  *      Vercel Blob storage adapter configured in payload.config.ts).
  *
+ * Guarded: refuses to run unless the target database can be positively confirmed to be
+ * non-production. See assertSafeToSeed() below — this is what stops `npm run seed` from
+ * writing a fake admin account and demo products into the live shop once production exists.
+ *
  * Run with:  npm run seed
  */
 import 'dotenv/config'
 import sharp from 'sharp'
 import { getPayload } from 'payload'
 import config from '../src/payload.config.js'
+
+/**
+ * Extracts a Supabase project ref from a Postgres connection string, supporting both
+ * connection shapes used in this project:
+ *   - Pooler (session/transaction): postgres.PROJECTREF@aws-...pooler.supabase.com
+ *   - Direct connection:            postgres@db.PROJECTREF.supabase.co
+ * Returns null when the URI isn't a recognisable Supabase connection string — that is
+ * treated as "cannot determine", never as "safe".
+ */
+function extractSupabaseProjectRef(databaseUri: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(databaseUri)
+  } catch {
+    return null
+  }
+
+  const username = decodeURIComponent(parsed.username)
+  if (username.startsWith('postgres.')) {
+    return username.slice('postgres.'.length) || null
+  }
+
+  const directMatch = /^db\.([^.]+)\.supabase\.co$/.exec(parsed.hostname)
+  if (directMatch) {
+    return directMatch[1]
+  }
+
+  return null
+}
+
+function refuseToSeed(reason: string): never {
+  console.error(
+    [
+      '',
+      'Seed refused.',
+      '',
+      reason,
+      '',
+      'This script creates a real admin account and demo products — running it against a',
+      'production database would put fake data in the live shop. If you are certain the',
+      'target database is safe, override deliberately with:',
+      '',
+      '  SEED_ALLOW_UNSAFE=1 npm run seed',
+      '',
+    ].join('\n'),
+  )
+  process.exit(1)
+}
+
+/**
+ * Fails closed: seeding proceeds only when the target can be positively confirmed to be
+ * non-production, or the caller has explicitly opted in with SEED_ALLOW_UNSAFE=1.
+ */
+function assertSafeToSeed(): void {
+  if (process.env.SEED_ALLOW_UNSAFE === '1') {
+    console.warn(
+      'SEED_ALLOW_UNSAFE=1 is set — skipping the production-database guard. Proceeding at your own risk.',
+    )
+    return
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    refuseToSeed('NODE_ENV is "production".')
+  }
+
+  const databaseUri = process.env.DATABASE_URI
+  if (!databaseUri) {
+    refuseToSeed('DATABASE_URI is not set, so the target database cannot be verified.')
+  }
+
+  const expectedRef = process.env.SEED_DEV_PROJECT_REF
+  if (!expectedRef) {
+    refuseToSeed(
+      'SEED_DEV_PROJECT_REF is not set, so this script cannot confirm DATABASE_URI points at ' +
+        'the development Supabase project. Set SEED_DEV_PROJECT_REF in your .env to the dev ' +
+        'project ref.',
+    )
+  }
+
+  const actualRef = extractSupabaseProjectRef(databaseUri)
+  if (!actualRef) {
+    refuseToSeed(
+      'DATABASE_URI does not look like a recognisable Supabase connection string, so its ' +
+        'target project cannot be verified.',
+    )
+  }
+
+  if (actualRef !== expectedRef) {
+    refuseToSeed(
+      `DATABASE_URI targets Supabase project "${actualRef}", which does not match the known ` +
+        `development project ("${expectedRef}" from SEED_DEV_PROJECT_REF).`,
+    )
+  }
+}
 
 const DEV_ADMIN_EMAIL = 'dev@overprint.local'
 const DEV_ADMIN_FALLBACK_PASSWORD = 'dev-only-CHANGE-ME-123!'
@@ -72,6 +170,8 @@ async function generatePhotoBuffer(color: { r: number; g: number; b: number }): 
 }
 
 async function main() {
+  assertSafeToSeed()
+
   const payload = await getPayload({ config })
 
   // --- 1. Development admin user ---
