@@ -1,0 +1,39 @@
+name: Deploy sandbox preview
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-preview
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - run: npm install --global vercel@latest
+
+      - name: Pull preview environment
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }} --scope tc-vercel-test
+
+      - name: Build
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }} --scope tc-vercel-test
+
+      - name: Deploy
+        id: deploy
+        run: echo "url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --scope tc-vercel-test)" >> "$GITHUB_OUTPUT"
+
+      - name: Point the stable staging alias at this deployment
+        run: vercel alias set "${{ steps.deploy.outputs.url }}" "${{ vars.STAGING_ALIAS }}" --token=${{ secrets.VERCEL_TOKEN }} --scope tc-vercel-test
+
+      - name: Report
+        run: echo "Preview deployed to https://${{ vars.STAGING_ALIAS }}" >> "$GITHUB_STEP_SUMMARY"
