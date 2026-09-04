@@ -29,6 +29,11 @@ export default buildConfig({
   db: postgresAdapter({
     pool: {
       connectionString: process.env.DATABASE_URI || '',
+      // Supabase's session-mode pooler caps this project at 15 total connections.
+      // The default pg Pool max is 10, which alone is fine, but a second Payload
+      // instance (e.g. an e2e helper script) running alongside the dev server can
+      // push the combined total over the limit. Keep our per-instance ceiling low.
+      max: 5,
     },
   }),
   sharp,
