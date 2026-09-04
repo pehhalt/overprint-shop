@@ -29,11 +29,21 @@ export default buildConfig({
   db: postgresAdapter({
     pool: {
       connectionString: process.env.DATABASE_URI || '',
-      // Supabase's session-mode pooler caps this project at 15 total connections.
-      // The default pg Pool max is 10, which alone is fine, but a second Payload
-      // instance (e.g. an e2e helper script) running alongside the dev server can
-      // push the combined total over the limit. Keep our per-instance ceiling low.
-      max: 5,
+      // Supabase's session-mode pooler caps this project at 15 total connections,
+      // shared across every process that's connected at once.
+      //
+      // Locally, `next dev` is one long-lived process serving many concurrent
+      // requests (plus e2e helper scripts that spin up their own Payload instance
+      // alongside it), so it genuinely benefits from several connections: 5 is
+      // what we established empirically running the e2e suite.
+      //
+      // In production on Vercel, each function instance holds its own pool and
+      // handles one request at a time, so a pool bigger than 1 buys a single
+      // instance nothing while multiplying the connection count across
+      // instances. max: 1 lets up to 15 instances run concurrently instead of 3;
+      // a bigger max here would make it easier to blow the pooler's cap under
+      // real traffic than it was to blow it locally with two dev processes.
+      max: process.env.NODE_ENV === 'production' ? 1 : 5,
     },
   }),
   sharp,
