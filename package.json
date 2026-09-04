@@ -14,6 +14,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
     "test:e2e": "playwright test",
     "generate:types": "payload generate:types",
     "generate:importmap": "payload generate:importmap",

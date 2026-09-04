@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, production]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - run: npm ci
+
+      # next typegen re-appends a .gitignore pattern that would hide .env.example.
+      # .env.example is a required deliverable (Task 6), so a tool-rewritten
+      # .gitignore can't be trusted to preserve tracking it — CI asserts it here
+      # instead.
+      - name: Assert .env.example is tracked
+        run: git ls-files --error-unmatch .env.example
+
+      - run: npm run lint
+      - run: npm run typecheck
+
+      # Only the DB-free tests (tests/unit/**) run in CI. tests/int/** exercises
+      # Payload's Local API against a live Supabase database via DATABASE_URI,
+      # and no database credential is going into GitHub secrets (see the build
+      # note below). tests/int/** still runs locally via `npm test`, against the
+      # development database.
+      - run: npm run test:unit
+
+      # No `build` step here on purpose. `npm run build` runs `payload migrate`,
+      # which needs a live DATABASE_URI — and no database credential is going
+      # into GitHub secrets. The deploy workflows build with credentials pulled
+      # from Vercel instead. The trade-off is that a build-only break surfaces
+      # at deploy rather than on the PR; typecheck catches nearly all of it.
