@@ -70,6 +70,7 @@ export interface Config {
     users: User;
     media: Media;
     products: Product;
+    orders: Order;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -80,6 +81,7 @@ export interface Config {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
     products: ProductsSelect<false> | ProductsSelect<true>;
+    orders: OrdersSelect<false> | OrdersSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -192,6 +194,40 @@ export interface Product {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "orders".
+ */
+export interface Order {
+  id: number;
+  /**
+   * Stripe Checkout Session id. The idempotency key for this order.
+   */
+  stripeCheckoutSessionId: string;
+  stripePaymentIntentId?: string | null;
+  email?: string | null;
+  status: 'pending' | 'paid' | 'expired';
+  /**
+   * Total charged, in cents.
+   */
+  amountTotal: number;
+  paidAt?: string | null;
+  items: {
+    product?: (number | null) | Product;
+    /**
+     * The name as it was at purchase time.
+     */
+    nameSnapshot: string;
+    /**
+     * The unit price actually charged, in cents.
+     */
+    unitAmountSnapshot: number;
+    quantity: number;
+    id?: string | null;
+  }[];
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -225,6 +261,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'products';
         value: number | Product;
+      } | null)
+    | ({
+        relationTo: 'orders';
+        value: number | Order;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -319,6 +359,29 @@ export interface ProductsSelect<T extends boolean = true> {
   description?: T;
   photo?: T;
   soldOut?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "orders_select".
+ */
+export interface OrdersSelect<T extends boolean = true> {
+  stripeCheckoutSessionId?: T;
+  stripePaymentIntentId?: T;
+  email?: T;
+  status?: T;
+  amountTotal?: T;
+  paidAt?: T;
+  items?:
+    | T
+    | {
+        product?: T;
+        nameSnapshot?: T;
+        unitAmountSnapshot?: T;
+        quantity?: T;
+        id?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }
