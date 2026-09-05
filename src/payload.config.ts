@@ -43,7 +43,23 @@ export default buildConfig({
       // instances. max: 1 lets up to 15 instances run concurrently instead of 3;
       // a bigger max here would make it easier to blow the pooler's cap under
       // real traffic than it was to blow it locally with two dev processes.
-      max: process.env.NODE_ENV === 'production' ? 1 : 5,
+      //
+      // The exception is `payload migrate`, which runs at BUILD time as a single
+      // process and needs more than one connection — it DEADLOCKS at max: 1,
+      // hanging forever after "Reading migration files" with no error and no
+      // timeout. That cost two 20-minute CI builds before we found it.
+      //
+      // PAYLOAD_MIGRATING is what distinguishes a build-time migration from the
+      // serverless runtime. Payload's own migrate binary sets it, but too late to
+      // help: this config module is imported before that assignment runs, so the
+      // value here would always read undefined. The build script therefore sets it
+      // itself, before the process starts — see package.json:
+      //   cross-env PAYLOAD_MIGRATING=true payload migrate && next build
+      // Removing it from the build script silently reintroduces the hang.
+      max:
+        process.env.NODE_ENV === 'production' && process.env.PAYLOAD_MIGRATING !== 'true'
+          ? 1
+          : 5,
     },
     // Schema changes travel by migration in EVERY environment, never by push.
     //
