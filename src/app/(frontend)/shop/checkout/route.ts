@@ -38,6 +38,16 @@ export async function POST(req: Request) {
   try {
     session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      // This sandbox account has Managed Payments enabled by default, which
+      // requires every line item's product to carry a Stripe tax code.
+      // Inline `price_data` (see the comment below on why we use it instead
+      // of pre-created Stripe Products) has no tax code, so Stripe rejects
+      // the session with "the product tax code is missing" unless Managed
+      // Payments is explicitly turned off for this session. Do not remove
+      // this — without it, checkout 502s against a live Stripe account
+      // (confirmed against Stripe's API directly), a failure mode no test
+      // here can catch because Stripe itself is mocked.
+      managed_payments: { enabled: false },
       line_items: [
         {
           quantity: 1,

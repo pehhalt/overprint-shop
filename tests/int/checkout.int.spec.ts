@@ -47,6 +47,7 @@ const SOLD_OUT_NAME = 'Task10 Fixture Product (checkout, sold out)'
 
 const SESSION_ID_PRICE_TEST = 'task10-fixture-cs_test_charges_db_price'
 const SESSION_ID_ORDER_TEST = 'task10-fixture-cs_test_writes_pending_order'
+const SESSION_ID_MANAGED_PAYMENTS_TEST = 'task10-fixture-cs_test_managed_payments_disabled'
 
 function request(body: unknown) {
   return new Request('http://localhost:3000/shop/checkout', {
@@ -125,7 +126,9 @@ describe('POST /shop/checkout (Task 10)', () => {
     const remainingOrders = await payload.find({
       collection: 'orders',
       where: {
-        stripeCheckoutSessionId: { in: [SESSION_ID_PRICE_TEST, SESSION_ID_ORDER_TEST] },
+        stripeCheckoutSessionId: {
+          in: [SESSION_ID_PRICE_TEST, SESSION_ID_ORDER_TEST, SESSION_ID_MANAGED_PAYMENTS_TEST],
+        },
       },
       limit: 10,
       overrideAccess: true,
@@ -205,6 +208,26 @@ describe('POST /shop/checkout (Task 10)', () => {
       overrideAccess: true,
     })
     expect(afterCount.totalDocs).toBe(beforeCount.totalDocs)
+  })
+
+  it('disables Managed Payments on the created session (required for inline price_data on this sandbox account)', async () => {
+    // Regression guard: this sandbox account has Managed Payments enabled by
+    // default, which requires a tax code on every line item's product.
+    // Inline `price_data` carries none, so Stripe rejects the session with
+    // "the product tax code is missing" unless `managed_payments.enabled` is
+    // explicitly set to `false`. Stripe is mocked here, so this can't catch
+    // the 502 itself — it only proves the flag is still being sent, so
+    // nobody removes it later as apparent dead code.
+    sessionsCreate.mockResolvedValue({
+      id: SESSION_ID_MANAGED_PAYMENTS_TEST,
+      url: 'https://checkout.stripe.com/managed-payments',
+    })
+
+    await POST(request({ productId: String(availableProductId) }))
+
+    expect(sessionsCreate).toHaveBeenCalledOnce()
+    const args = sessionsCreate.mock.calls[0][0]
+    expect(args.managed_payments).toEqual({ enabled: false })
   })
 
   it('rejects a request with no productId with 400', async () => {
