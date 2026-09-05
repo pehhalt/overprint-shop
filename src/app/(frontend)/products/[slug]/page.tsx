@@ -2,6 +2,7 @@ import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { notFound } from 'next/navigation'
 import { formatPrice } from '@/lib/constants'
+import { BuyButton } from './BuyButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,7 +32,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         <h1 className="text-2xl font-bold">{product.name}</h1>
         <p className="mt-2 text-xl">{formatPrice(product.price)}</p>
         <p className="mt-4 text-neutral-700">{product.description}</p>
-        <p className="mt-6 text-sm text-neutral-500">Buy button arrives in Task 10.</p>
+        <BuyButton productId={String(product.id)} soldOut={Boolean(product.soldOut)} />
       </div>
     </main>
   )

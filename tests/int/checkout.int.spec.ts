@@ -1,0 +1,214 @@
+/**
+ * Task 10: the checkout handler.
+ *
+ * The property this handler exists to guarantee: the amount sent to Stripe is
+ * read from the database inside the same request. Nothing in the request
+ * body is trusted — a client-supplied price is a free-shirt button.
+ *
+ * Unlike the brief's own test sketch, this suite does NOT mock Payload. Only
+ * Stripe's `checkout.sessions.create` is mocked (we don't want to hit the
+ * real Stripe API from a test run, and we don't need to — nothing here
+ * depends on what Stripe does with the session). The handler runs against
+ * the real development database, the same way `tests/int/orders-access.int.spec.ts`
+ * and `tests/int/media-delete-guard.int.spec.ts` do. Mocking the database
+ * would make the single most important assertion in this file — that the
+ * price handed to Stripe comes from the database, not the request — vacuous:
+ * a mocked `findByID` could be made to return anything, including the
+ * client-supplied price itself, and the test would still pass.
+ *
+ * Fixture products are created here (clearly named `Task10 Fixture …`) and
+ * removed in `afterAll`, along with any orders they produced. The seeded
+ * Midnight/Coral Sunset/Forest Ridge products and `dev@overprint.local` are
+ * never touched.
+ */
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { getPayload, type Payload } from 'payload'
+import sharp from 'sharp'
+import config from '@payload-config'
+
+const { sessionsCreate } = vi.hoisted(() => ({ sessionsCreate: vi.fn() }))
+
+vi.mock('@/lib/stripe', () => ({
+  stripe: { checkout: { sessions: { create: sessionsCreate } } },
+}))
+
+const { POST } = await import('@/app/(frontend)/shop/checkout/route')
+
+const FIXTURE_ALT = 'Task10 Fixture: checkout photo'
+const FIXTURE_PRICE = 4321
+const AVAILABLE_SLUG = 'task10-fixture-checkout-available'
+const AVAILABLE_NAME = 'Task10 Fixture Product (checkout, available)'
+const SOLD_OUT_SLUG = 'task10-fixture-checkout-sold-out'
+const SOLD_OUT_NAME = 'Task10 Fixture Product (checkout, sold out)'
+
+const SESSION_ID_PRICE_TEST = 'task10-fixture-cs_test_charges_db_price'
+const SESSION_ID_ORDER_TEST = 'task10-fixture-cs_test_writes_pending_order'
+
+function request(body: unknown) {
+  return new Request('http://localhost:3000/shop/checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+async function makePhotoBuffer(): Promise<Buffer> {
+  return sharp({
+    create: { width: 16, height: 16, channels: 3, background: { r: 30, g: 90, b: 200 } },
+  })
+    .png()
+    .toBuffer()
+}
+
+describe('POST /shop/checkout (Task 10)', () => {
+  let payload: Payload
+  let mediaId: number
+  let availableProductId: number
+  let soldOutProductId: number
+
+  beforeAll(async () => {
+    payload = await getPayload({ config })
+
+    const buffer = await makePhotoBuffer()
+    const media = await payload.create({
+      collection: 'media',
+      data: { alt: FIXTURE_ALT },
+      file: {
+        data: buffer,
+        mimetype: 'image/png',
+        name: 'task10-checkout-fixture.png',
+        size: buffer.length,
+      },
+    })
+    mediaId = media.id
+
+    const available = await payload.create({
+      collection: 'products',
+      data: {
+        name: AVAILABLE_NAME,
+        slug: AVAILABLE_SLUG,
+        price: FIXTURE_PRICE,
+        description: 'Task 10 fixture: available for checkout.',
+        photo: mediaId,
+        soldOut: false,
+      },
+    })
+    availableProductId = available.id
+
+    const soldOut = await payload.create({
+      collection: 'products',
+      data: {
+        name: SOLD_OUT_NAME,
+        slug: SOLD_OUT_SLUG,
+        price: 999,
+        description: 'Task 10 fixture: sold out, must refuse checkout.',
+        photo: mediaId,
+        soldOut: true,
+      },
+    })
+    soldOutProductId = soldOut.id
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    process.env.NEXT_PUBLIC_SERVER_URL = 'http://localhost:3000'
+  })
+
+  afterAll(async () => {
+    // Clean up orders these tests may have created (matched by the fixture
+    // session ids), then the fixture products, then the fixture media —
+    // whatever the test outcome was.
+    const remainingOrders = await payload.find({
+      collection: 'orders',
+      where: {
+        stripeCheckoutSessionId: { in: [SESSION_ID_PRICE_TEST, SESSION_ID_ORDER_TEST] },
+      },
+      limit: 10,
+      overrideAccess: true,
+    })
+    for (const doc of remainingOrders.docs) {
+      await payload.delete({ collection: 'orders', id: doc.id, overrideAccess: true }).catch(() => {})
+    }
+
+    const remainingProducts = await payload.find({
+      collection: 'products',
+      where: { slug: { in: [AVAILABLE_SLUG, SOLD_OUT_SLUG] } },
+      limit: 10,
+    })
+    for (const doc of remainingProducts.docs) {
+      await payload.delete({ collection: 'products', id: doc.id }).catch(() => {})
+    }
+
+    await payload.delete({ collection: 'media', id: mediaId }).catch(() => {})
+  })
+
+  it('charges the database price, not one supplied by the client', async () => {
+    sessionsCreate.mockResolvedValue({
+      id: SESSION_ID_PRICE_TEST,
+      url: 'https://checkout.stripe.com/x',
+    })
+
+    // The request body lies about the price. The handler must ignore it.
+    const response = await POST(request({ productId: String(availableProductId), price: 1 }))
+
+    expect(response.status).toBe(200)
+    expect(sessionsCreate).toHaveBeenCalledOnce()
+    const args = sessionsCreate.mock.calls[0][0]
+    expect(args.line_items[0].price_data.unit_amount).toBe(FIXTURE_PRICE)
+    expect(args.line_items[0].price_data.unit_amount).not.toBe(1)
+  })
+
+  it('writes a pending order carrying the checkout session id, with unitAmountSnapshot equal to the database price', async () => {
+    sessionsCreate.mockResolvedValue({
+      id: SESSION_ID_ORDER_TEST,
+      url: 'https://checkout.stripe.com/y',
+    })
+
+    const response = await POST(request({ productId: String(availableProductId) }))
+    expect(response.status).toBe(200)
+
+    const found = await payload.find({
+      collection: 'orders',
+      where: { stripeCheckoutSessionId: { equals: SESSION_ID_ORDER_TEST } },
+      overrideAccess: true,
+    })
+
+    expect(found.totalDocs).toBe(1)
+    const order = found.docs[0]
+    expect(order.status).toBe('pending')
+    expect(order.stripeCheckoutSessionId).toBe(SESSION_ID_ORDER_TEST)
+    expect(order.amountTotal).toBe(FIXTURE_PRICE)
+    expect(order.items[0].unitAmountSnapshot).toBe(FIXTURE_PRICE)
+  })
+
+  it('refuses a sold-out product with 409, creating no Stripe session and no order row', async () => {
+    const beforeCount = await payload.find({
+      collection: 'orders',
+      where: { 'items.product': { equals: soldOutProductId } },
+      overrideAccess: true,
+    })
+
+    const response = await POST(request({ productId: String(soldOutProductId) }))
+    const data = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(data.error).toBeTruthy()
+    expect(sessionsCreate).not.toHaveBeenCalled()
+
+    const afterCount = await payload.find({
+      collection: 'orders',
+      where: { 'items.product': { equals: soldOutProductId } },
+      overrideAccess: true,
+    })
+    expect(afterCount.totalDocs).toBe(beforeCount.totalDocs)
+  })
+
+  it('rejects a request with no productId with 400', async () => {
+    const response = await POST(request({}))
+    const data = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(data.error).toBeTruthy()
+    expect(sessionsCreate).not.toHaveBeenCalled()
+  })
+})
