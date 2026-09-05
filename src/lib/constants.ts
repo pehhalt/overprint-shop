@@ -1,5 +1,5 @@
 export const CURRENCY = 'eur' as const
-export const SHOP_NAME = 'THIS RELEASE IS BROKEN — rollback rehearsal in progress'
+export const SHOP_NAME = 'Overprint'
 
 /** Formats an integer number of cents as a display price. */
 export function formatPrice(cents: number): string {
