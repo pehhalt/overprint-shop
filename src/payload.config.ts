@@ -45,6 +45,20 @@ export default buildConfig({
       // real traffic than it was to blow it locally with two dev processes.
       max: process.env.NODE_ENV === 'production' ? 1 : 5,
     },
+    // Schema changes travel by migration in EVERY environment, never by push.
+    //
+    // Payload's dev-only push mode writes a `batch: -1` row into
+    // payload_migrations. `payload migrate` sees that row and prompts
+    // "data loss will occur. Would you like to proceed?" — a prompt with no TTY
+    // in CI, so the deploy hangs indefinitely rather than failing. It cost us a
+    // 22-minute build before we found it, and there is no flag to bypass it
+    // (see @payloadcms/drizzle/dist/migrate.js).
+    //
+    // Managing development by migration too keeps every environment identical
+    // and stops that row from ever being written. The cost is that a schema
+    // change now needs `payload migrate:create` followed by `payload migrate`,
+    // instead of appearing automatically on the next `npm run dev`.
+    push: false,
   }),
   sharp,
   plugins: [
