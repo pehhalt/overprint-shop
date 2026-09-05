@@ -18,4 +18,17 @@ Print-on-demand is the shop's premise, not an integration — no fulfilment prov
 - **Node 22.** Pinned in `.nvmrc`, `engines`, and Volta.
 - **Products access rule:** anyone may read; only a logged-in admin may create, edit or delete.
 
+## Schema changes: migrate, never push
+
+`src/payload.config.ts` sets `push: false`. Payload does **not** sync schema changes automatically, in any environment, including local development. If you add, rename or remove a field on a collection (e.g. `src/collections/Products.ts`), you must generate and run a migration yourself:
+
+```
+volta run --node 22 -- npx payload migrate:create <name>
+volta run --node 22 -- npx payload migrate
+```
+
+**Why push is off:** Payload's dev-only push mode writes a `batch: -1` row into `payload_migrations`. When a real migration later runs against that database, `payload migrate` sees that row and prompts "data loss will occur. Would you like to proceed?" — a prompt with no TTY in CI, so the deploy hangs indefinitely rather than failing or succeeding. Keeping push off in every environment, including local dev, means that row is never written and every environment's schema history stays identical.
+
+**If you forget:** the failure is silent. TypeScript compiles, the app starts, and the admin panel simply does not show the new field — no error, no warning. If a collection field you just added isn't showing up in the admin UI, the fix is almost always to create and run the missing migration, not to debug the collection config.
+
 @AGENTS.md
