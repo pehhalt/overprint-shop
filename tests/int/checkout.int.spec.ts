@@ -6,9 +6,10 @@
  * body is trusted — a client-supplied price is a free-shirt button.
  *
  * Unlike the brief's own test sketch, this suite does NOT mock Payload. Only
- * Stripe's `checkout.sessions.create` is mocked (we don't want to hit the
- * real Stripe API from a test run, and we don't need to — nothing here
- * depends on what Stripe does with the session). The handler runs against
+ * Stripe's `checkout.sessions.create` and `checkout.sessions.expire` are
+ * mocked (we don't want to hit the real Stripe API from a test run, and we
+ * don't need to — nothing here depends on what Stripe does with the
+ * session). The handler runs against
  * the real development database, the same way `tests/int/orders-access.int.spec.ts`
  * and `tests/int/media-delete-guard.int.spec.ts` do. Mocking the database
  * would make the single most important assertion in this file — that the
@@ -26,10 +27,13 @@ import { getPayload, type Payload } from 'payload'
 import sharp from 'sharp'
 import config from '@payload-config'
 
-const { sessionsCreate } = vi.hoisted(() => ({ sessionsCreate: vi.fn() }))
+const { sessionsCreate, sessionsExpire } = vi.hoisted(() => ({
+  sessionsCreate: vi.fn(),
+  sessionsExpire: vi.fn(),
+}))
 
 vi.mock('@/lib/stripe', () => ({
-  stripe: { checkout: { sessions: { create: sessionsCreate } } },
+  stripe: { checkout: { sessions: { create: sessionsCreate, expire: sessionsExpire } } },
 }))
 
 const { POST } = await import('@/app/(frontend)/shop/checkout/route')
@@ -210,5 +214,65 @@ describe('POST /shop/checkout (Task 10)', () => {
     expect(response.status).toBe(400)
     expect(data.error).toBeTruthy()
     expect(sessionsCreate).not.toHaveBeenCalled()
+  })
+
+  it('returns 502 with a JSON error body when Stripe fails, and writes no order', async () => {
+    sessionsCreate.mockRejectedValue(new Error('Stripe is down (simulated)'))
+
+    const beforeCount = await payload.find({
+      collection: 'orders',
+      where: { 'items.product': { equals: availableProductId } },
+      overrideAccess: true,
+    })
+
+    const response = await POST(request({ productId: String(availableProductId) }))
+    // A non-JSON 500 is exactly the bug this test guards against — the
+    // response must always be parseable JSON, whatever the status.
+    const data = await response.json()
+
+    expect(response.status).toBe(502)
+    expect(data.error).toBeTruthy()
+    expect(data.url).toBeUndefined()
+
+    const afterCount = await payload.find({
+      collection: 'orders',
+      where: { 'items.product': { equals: availableProductId } },
+      overrideAccess: true,
+    })
+    expect(afterCount.totalDocs).toBe(beforeCount.totalDocs)
+  })
+
+  it('expires the Stripe session and returns an error when the order write fails afterwards', async () => {
+    const SESSION_ID_EXPIRE_TEST = 'task10-fixture-cs_test_order_write_fails'
+    sessionsCreate.mockResolvedValue({
+      id: SESSION_ID_EXPIRE_TEST,
+      url: 'https://checkout.stripe.com/z',
+    })
+    sessionsExpire.mockResolvedValue({ id: SESSION_ID_EXPIRE_TEST, status: 'expired' })
+
+    const createSpy = vi.spyOn(payload, 'create').mockRejectedValueOnce(new Error('DB write failed (simulated)'))
+
+    try {
+      const response = await POST(request({ productId: String(availableProductId) }))
+      const data = await response.json()
+
+      expect(response.status).toBe(502)
+      expect(data.error).toBeTruthy()
+      expect(data.url).toBeUndefined()
+
+      // The compensating action: the now-orphaned session must be closed so
+      // it can never be paid.
+      expect(sessionsExpire).toHaveBeenCalledOnce()
+      expect(sessionsExpire).toHaveBeenCalledWith(SESSION_ID_EXPIRE_TEST)
+
+      const found = await payload.find({
+        collection: 'orders',
+        where: { stripeCheckoutSessionId: { equals: SESSION_ID_EXPIRE_TEST } },
+        overrideAccess: true,
+      })
+      expect(found.totalDocs).toBe(0)
+    } finally {
+      createSpy.mockRestore()
+    }
   })
 })

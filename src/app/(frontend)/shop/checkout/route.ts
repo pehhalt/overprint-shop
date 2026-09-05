@@ -34,43 +34,80 @@ export async function POST(req: Request) {
 
   const origin = process.env.NEXT_PUBLIC_SERVER_URL
 
-  const session = await stripe.checkout.sessions.create({
-    mode: 'payment',
-    line_items: [
-      {
-        quantity: 1,
-        price_data: {
-          currency: CURRENCY,
-          unit_amount: product.price,
-          product_data: { name: product.name },
+  let session: Awaited<ReturnType<typeof stripe.checkout.sessions.create>>
+  try {
+    session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: CURRENCY,
+            unit_amount: product.price,
+            product_data: { name: product.name },
+          },
         },
-      },
-    ],
-    success_url: `${origin}/order/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/products/${product.slug}`,
-  })
+      ],
+      success_url: `${origin}/order/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/products/${product.slug}`,
+    })
+  } catch (error) {
+    // Stripe is an upstream dependency failing, not a client mistake — 502,
+    // not 400/500. Log the real error server-side; never hand its text to
+    // the client.
+    console.error('Stripe checkout session creation failed', error)
+    return NextResponse.json(
+      { error: 'Could not start checkout. Please try again in a moment.' },
+      { status: 502 },
+    )
+  }
 
   // Written pending now; only the signature-verified Stripe webhook may mark
   // an order paid. `overrideAccess: true` is required here — Task 9 closed
   // `create` to every HTTP path deliberately, and this handler is the
   // server-side exception that path is meant for.
-  await payload.create({
-    collection: 'orders',
-    overrideAccess: true,
-    data: {
-      stripeCheckoutSessionId: session.id,
-      status: 'pending',
-      amountTotal: product.price,
-      items: [
-        {
-          product: product.id,
-          nameSnapshot: product.name,
-          unitAmountSnapshot: product.price,
-          quantity: 1,
-        },
-      ],
-    },
-  })
+  try {
+    await payload.create({
+      collection: 'orders',
+      overrideAccess: true,
+      data: {
+        stripeCheckoutSessionId: session.id,
+        status: 'pending',
+        amountTotal: product.price,
+        items: [
+          {
+            product: product.id,
+            nameSnapshot: product.name,
+            unitAmountSnapshot: product.price,
+            quantity: 1,
+          },
+        ],
+      },
+    })
+  } catch (error) {
+    // The session already exists at Stripe but has no order to be marked
+    // paid against — a customer could pay into the void. Close the window by
+    // expiring the session so it can no longer be paid, rather than leaving
+    // it live and racing a fix on the order side.
+    console.error('Order write failed after Stripe session creation; expiring session', {
+      sessionId: session.id,
+      error,
+    })
+    try {
+      await stripe.checkout.sessions.expire(session.id)
+    } catch (expireError) {
+      // This is the case a human needs to see: a live, payable session with
+      // no order behind it, and we could not even close it ourselves.
+      console.error('FAILED TO EXPIRE ORPHANED STRIPE SESSION — manual intervention required', {
+        sessionId: session.id,
+        expireError,
+      })
+    }
+    return NextResponse.json(
+      { error: 'Could not start checkout. Please try again in a moment.' },
+      { status: 502 },
+    )
+  }
 
   return NextResponse.json({ url: session.url })
 }
