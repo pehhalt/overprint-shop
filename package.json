@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "cross-env PAYLOAD_MIGRATING=true payload migrate && next build",
+    "build": "payload migrate && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

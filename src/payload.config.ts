@@ -30,31 +30,32 @@ export default buildConfig({
     pool: {
       connectionString: process.env.DATABASE_URI || '',
       // Supabase's session-mode pooler caps this project at 15 total connections,
-      // shared across every process that's connected at once.
+      // shared across every process that's connected at once. The right pool
+      // size is different in production and in local development, so it is not
+      // a single flat number:
       //
-      // Locally, `next dev` is one long-lived process serving many concurrent
-      // requests (plus e2e helper scripts that spin up their own Payload instance
-      // alongside it), so it genuinely benefits from several connections: 5 is
-      // what we established empirically running the e2e suite.
+      //   * Production gets 3. Payload holds one connection for its own
+      //     initialisation and needs a further one to run a query, so a pool of
+      //     1 can never satisfy a single request — it deadlocks both
+      //     `payload migrate` (hangs forever after "Reading migration files",
+      //     no error, no timeout) and every database-backed page (504 Vercel
+      //     Runtime Timeout, while a route that never touches the database,
+      //     like /admin, serves normally — which makes it look like a data
+      //     problem rather than a pool problem). Payload needs at least 2; 3
+      //     leaves a little headroom without being reckless against Supabase's
+      //     15-connection ceiling, which is shared across every connected
+      //     process at once — roughly 5 concurrent serverless function
+      //     instances at a pool size of 3 each.
+      //   * Local development gets 5. `next dev` is one long-lived process
+      //     serving many concurrent requests, alongside e2e helper scripts
+      //     that open their own Payload instance at the same time, so it
+      //     genuinely benefits from more headroom than production does: 5 is
+      //     the value established empirically after the e2e suite exhausted
+      //     the pooler at a lower number.
       //
-      // DO NOT set this to 1. It looks like the right answer for serverless — one
-      // request per instance, so why hold more? — and it breaks Payload twice over,
-      // both times silently:
-      //
-      //   * `payload migrate` hangs forever after "Reading migration files", with
-      //     no error and no timeout. Two 20-minute CI builds were cancelled before
-      //     we traced it.
-      //   * Every page that queries the database returns 504 Vercel Runtime
-      //     Timeout in production, while routes that do not touch the database
-      //     (like /admin) serve normally in under a second — which makes it look
-      //     like a data problem rather than a pool problem.
-      //
-      // The cause is that Payload holds a connection for its own initialisation
-      // and needs a further one to run a query, so a pool of 1 can never satisfy a
-      // single request. It needs at least 2; 3 leaves headroom without being
-      // reckless against Supabase's 15-connection ceiling, which is shared across
-      // every connected process — roughly 5 concurrent function instances.
-      max: 3,
+      // DO NOT set this to 1 in any environment — see the production deadlock
+      // above.
+      max: process.env.NODE_ENV === 'production' ? 3 : 5,
     },
     // Schema changes travel by migration in EVERY environment, never by push.
     //
