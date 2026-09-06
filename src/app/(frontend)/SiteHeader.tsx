@@ -13,7 +13,7 @@ import { SiteNav } from './SiteNav'
 export function SiteHeader() {
   return (
     <header className="border-b bg-neutral-50">
-      <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-8 py-4">
+      <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-8 py-4">
         <div>
           <Link href="/" className="text-3xl font-extrabold tracking-tight text-neutral-900">
             Over<span className="text-red-600">Print</span>

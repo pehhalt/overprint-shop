@@ -1,5 +1,7 @@
-// The start page. Deliberately just the banner for now — the rest of it is a
-// later round.
+import { FeatureStrip } from './FeatureStrip'
+
+// The start page: the banner, and the claims beneath it. Featured tees and
+// whatever else comes from the design are a later round.
 //
 // The banner sits in the same column as the header and the catalogue rather
 // than running full-bleed — same max-w-4xl, same 32px side padding — so the
@@ -25,6 +27,8 @@ export default function StartPage() {
           AI-generated image
         </figcaption>
       </figure>
+
+      <FeatureStrip />
     </main>
   )
 }
