@@ -1,8 +1,8 @@
 /**
- * Finding 1 (Critical): deleting a photo that a product uses must be refused
+ * Finding 1 (Critical): deleting an image that a product uses must be refused
  * with a clear, human-readable error — not an opaque database exception.
  *
- * `products.photo_id` is `integer NOT NULL` with `ON DELETE set null`, so a raw
+ * `products.image_id` is `integer NOT NULL` with `ON DELETE set null`, so a raw
  * delete of a referenced media row would otherwise abort with an unhandled
  * Postgres NOT NULL violation. `src/collections/Media.ts` adds a `beforeDelete`
  * hook that checks for referencing products first and throws a Payload
@@ -18,11 +18,11 @@ import { getPayload, type Payload } from 'payload'
 import sharp from 'sharp'
 import config from '@payload-config'
 
-const FIXTURE_ALT = 'Task7 Fixture: media-delete-guard photo'
+const FIXTURE_ALT = 'Task7 Fixture: media-delete-guard image'
 const FIXTURE_SLUG = 'task7-fixture-media-delete-guard'
 const FIXTURE_NAME = 'Task7 Fixture Product (media-delete-guard)'
 
-async function makePhotoBuffer(): Promise<Buffer> {
+async function makeImageBuffer(): Promise<Buffer> {
   return sharp({
     create: { width: 32, height: 32, channels: 3, background: { r: 200, g: 50, b: 50 } },
   })
@@ -38,7 +38,7 @@ describe('Media beforeDelete guard (Finding 1)', () => {
   beforeAll(async () => {
     payload = await getPayload({ config })
 
-    const buffer = await makePhotoBuffer()
+    const buffer = await makeImageBuffer()
     const media = await payload.create({
       collection: 'media',
       data: { alt: FIXTURE_ALT, generatedBy: 'photograph' },
@@ -58,7 +58,7 @@ describe('Media beforeDelete guard (Finding 1)', () => {
         slug: FIXTURE_SLUG,
         price: 1999,
         description: 'Fixture product created for the Task 7 media-delete-guard test.',
-        photo: mediaId,
+        image: mediaId,
         soldOut: false,
       },
     })

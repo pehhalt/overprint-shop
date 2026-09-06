@@ -23,9 +23,9 @@ export default async function CataloguePage() {
         {products.map((product) => (
           <li key={product.id} className="rounded-lg border p-4">
             <Link href={`/products/${product.slug}`}>
-              {typeof product.photo === 'object' && product.photo?.url && (
+              {typeof product.image === 'object' && product.image?.url && (
                 <ProductImage
-                  media={product.photo}
+                  media={product.image}
                   className="aspect-square w-full rounded object-cover"
                 />
               )}

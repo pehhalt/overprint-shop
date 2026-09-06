@@ -188,7 +188,7 @@ export interface Product {
    */
   price: number;
   description: string;
-  photo: number | Media;
+  image: number | Media;
   /**
    * Hides the buy button and refuses checkout.
    */
@@ -383,7 +383,7 @@ export interface ProductsSelect<T extends boolean = true> {
   slug?: T;
   price?: T;
   description?: T;
-  photo?: T;
+  image?: T;
   soldOut?: T;
   updatedAt?: T;
   createdAt?: T;

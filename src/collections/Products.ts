@@ -58,7 +58,7 @@ export const Products: CollectionConfig = {
       },
     },
     { name: 'description', type: 'textarea', required: true },
-    { name: 'photo', type: 'upload', relationTo: 'media', required: true },
+    { name: 'image', type: 'upload', relationTo: 'media', required: true },
     {
       name: 'soldOut',
       type: 'checkbox',

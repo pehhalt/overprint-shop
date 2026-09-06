@@ -1,6 +1,6 @@
 # Overprint
 
-Overprint is a small print-on-demand t-shirt shop. The owner logs into an admin panel and manages a catalogue of three or four shirt designs — each with a name, a price, a short description and a mockup photo. A visitor browses the catalogue, picks a shirt, and pays through Stripe's hosted Checkout running in sandbox. The order is marked paid only when Stripe's own signed webhook confirms it.
+Overprint is a small print-on-demand t-shirt shop. The owner logs into an admin panel and manages a catalogue of three or four shirt designs — each with a name, a price, a short description and a product image. A visitor browses the catalogue, picks a shirt, and pays through Stripe's hosted Checkout running in sandbox. The order is marked paid only when Stripe's own signed webhook confirms it.
 
 The catalogue is the CMS. The shirt sale is the payment. Both halves are load-bearing: remove the CMS and the owner cannot change the catalogue without a redeploy; remove Stripe and nothing is sold.
 
@@ -39,7 +39,7 @@ This shop is deployed and live. These rules are not negotiable, and they are not
 - **Never merge a pull request yourself.** Open it, say it is ready, and stop. The human checks the change on the sandbox deployment and merges it.
 - **Never commit or merge directly to the `production` branch.** Production is promoted only by merging `main` into it, only after the human has checked the sandbox deployment, and only through a pull request they merge themselves.
 - **Never run anything that could delete or overwrite the production database.** The seed script's `SEED_ALLOW_UNSAFE` override exists for a human to use deliberately; it is not for an agent. `scripts/seed.ts` is a development fixture tool only.
-- **Never create content in production to make a check pass.** Products, prices and photos are the owner's, created in the production admin panel. Seeded fixtures belong in development, where they are obviously fake.
+- **Never create content in production to make a check pass.** Products, prices and images are the owner's, created in the production admin panel. Seeded fixtures belong in development, where they are obviously fake.
 
 **Why the merge rule matters most.** The other rules prevent an accident. This one preserves a checkpoint. An agent can verify a deploy after the fact, but only a human can look at a change and decide it should reach users. Merging on the agent's own judgement removes that decision without anyone noticing it is gone — the app still works, the tests still pass, and the only thing missing is the person who was supposed to say yes.
 

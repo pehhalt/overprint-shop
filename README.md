@@ -2,7 +2,7 @@
 
 Overprint is a small print-on-demand t-shirt shop. The owner logs into an admin
 panel and manages a catalogue of a few shirt designs — name, price, description,
-mockup photo. A visitor browses the catalogue, picks a shirt, and pays through
+product image. A visitor browses the catalogue, picks a shirt, and pays through
 Stripe's hosted Checkout running in sandbox; the order is marked paid only when
 Stripe's own signed webhook confirms it.
 
@@ -18,7 +18,7 @@ sold.
 - **Next.js 16** (App Router) — frontend and the two payment route handlers
 - **Payload CMS 3**, self-hosted inside the Next.js app — catalogue and orders
 - **Supabase Postgres** — Payload's database, via the session pooler
-- **Vercel Blob** — product photo storage, through Payload's storage adapter
+- **Vercel Blob** — product image storage, through Payload's storage adapter
 - **Stripe Checkout** (sandbox) — hosted payment page, confirmed by webhook
 - **Vitest** (unit + integration) and **Playwright** (e2e) for tests
 - **GitHub Actions** for CI and for deploys — see [the pipeline](#deployment-pipeline) below

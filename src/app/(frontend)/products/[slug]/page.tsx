@@ -22,9 +22,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   return (
     <main className="mx-auto grid max-w-4xl gap-8 p-8 md:grid-cols-2">
-      {typeof product.photo === 'object' && product.photo?.url && (
+      {typeof product.image === 'object' && product.image?.url && (
         <ProductImage
-          media={product.photo}
+          media={product.image}
           className="aspect-square w-full rounded-lg object-cover"
         />
       )}

@@ -38,7 +38,7 @@ vi.mock('@/lib/stripe', () => ({
 
 const { POST } = await import('@/app/(frontend)/shop/checkout/route')
 
-const FIXTURE_ALT = 'Task10 Fixture: checkout photo'
+const FIXTURE_ALT = 'Task10 Fixture: checkout image'
 const FIXTURE_PRICE = 4321
 const AVAILABLE_SLUG = 'task10-fixture-checkout-available'
 const AVAILABLE_NAME = 'Task10 Fixture Product (checkout, available)'
@@ -61,7 +61,7 @@ function request(body: unknown) {
   })
 }
 
-async function makePhotoBuffer(): Promise<Buffer> {
+async function makeImageBuffer(): Promise<Buffer> {
   return sharp({
     create: { width: 16, height: 16, channels: 3, background: { r: 30, g: 90, b: 200 } },
   })
@@ -78,7 +78,7 @@ describe('POST /shop/checkout (Task 10)', () => {
   beforeAll(async () => {
     payload = await getPayload({ config })
 
-    const buffer = await makePhotoBuffer()
+    const buffer = await makeImageBuffer()
     const media = await payload.create({
       collection: 'media',
       data: { alt: FIXTURE_ALT, generatedBy: 'photograph' },
@@ -98,7 +98,7 @@ describe('POST /shop/checkout (Task 10)', () => {
         slug: AVAILABLE_SLUG,
         price: FIXTURE_PRICE,
         description: 'Task 10 fixture: available for checkout.',
-        photo: mediaId,
+        image: mediaId,
         soldOut: false,
       },
     })
@@ -111,7 +111,7 @@ describe('POST /shop/checkout (Task 10)', () => {
         slug: SOLD_OUT_SLUG,
         price: 999,
         description: 'Task 10 fixture: sold out, must refuse checkout.',
-        photo: mediaId,
+        image: mediaId,
         soldOut: true,
       },
     })

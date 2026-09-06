@@ -7,7 +7,7 @@ export const Media: CollectionConfig = {
   access: { read: anyone, create: isLoggedIn, update: isLoggedIn, delete: isLoggedIn },
   upload: true,
   hooks: {
-    // `products.photo` is a required (NOT NULL) relationship, so deleting a media
+    // `products.image` is a required (NOT NULL) relationship, so deleting a media
     // item still in use would otherwise abort with a raw Postgres NOT NULL
     // violation. Refuse the delete at the application layer with a clear message
     // instead of letting that error surface in the admin UI.
@@ -15,7 +15,7 @@ export const Media: CollectionConfig = {
       async ({ req, id }) => {
         const referencingProducts = await req.payload.find({
           collection: 'products',
-          where: { photo: { equals: id } },
+          where: { image: { equals: id } },
           depth: 0,
           limit: 0,
           pagination: false,
@@ -26,7 +26,7 @@ export const Media: CollectionConfig = {
           const names = referencingProducts.docs.map((product) => product.name).join(', ')
           const isPlural = referencingProducts.totalDocs > 1
           throw new APIError(
-            `This photo is still used by ${isPlural ? 'products' : 'product'} "${names}". Change or remove ${isPlural ? 'their' : 'its'} photo before deleting this file.`,
+            `This image is still used by ${isPlural ? 'products' : 'product'} "${names}". Change or remove ${isPlural ? 'their' : 'its'} image before deleting this file.`,
             400,
             undefined,
             true,

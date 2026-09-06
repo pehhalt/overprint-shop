@@ -26,7 +26,7 @@ import sharp from 'sharp'
 import config from '@payload-config'
 import { validatePrice } from '@/collections/Products'
 
-const FIXTURE_ALT = 'Task7 Fixture: product-price photo'
+const FIXTURE_ALT = 'Task7 Fixture: product-price image'
 const FRACTIONAL_SLUG = 'task7-fixture-price-fractional'
 const INTEGER_SLUG = 'task7-fixture-price-integer'
 
@@ -104,7 +104,7 @@ describe('Product price validation, end to end (Finding 2)', () => {
           slug: FRACTIONAL_SLUG,
           price: 25.5,
           description: 'Should be rejected by validatePrice.',
-          photo: mediaId,
+          image: mediaId,
         },
       })
     } catch (error) {
@@ -132,7 +132,7 @@ describe('Product price validation, end to end (Finding 2)', () => {
         slug: INTEGER_SLUG,
         price: 2500,
         description: 'Should be accepted.',
-        photo: mediaId,
+        image: mediaId,
       },
     })
 
