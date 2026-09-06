@@ -15,11 +15,12 @@
  * production guard too (recorded in README's Known limitations). Here `NODE_ENV ===
  * 'production'` is checked first, unconditionally, before anything reads
  * `ORDER_ADMIN_ALLOW_UNSAFE` — proven below by setting the override and still expecting
- * a refusal. `findOrders` and `redactOrder` both call the guard as their first
- * statement (fix round 1); the `assertSafeTarget` describe block below proves that
- * directly by pointing the guard's own inputs at a rejectable target and calling
- * `findOrders`/`redactOrder` themselves, rather than trusting that the guard is still
- * wired in because the rest of the suite passes against the real dev database.
+ * a refusal. `findOrders`, `redactOrder` and `deleteOrder` all call the guard as their
+ * first statement; the `assertSafeTarget` describe block below proves that directly by
+ * pointing the guard's own inputs at a rejectable target and calling each of the three
+ * itself, rather than trusting that the guard is still wired in because the rest of the
+ * suite passes against the real dev database. `deleteOrder` matters most of the three:
+ * it is the only irreversible one.
  *
  * Two fixture orders are used, not one: the redaction test mutates its fixture's email
  * away, so a second, never-redacted fixture backs the lookup test. Both carry every
@@ -32,13 +33,15 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { getPayload, type Payload } from 'payload'
 import config from '@payload-config'
-import { assertSafeTarget, findOrders, redactOrder } from '@/lib/order-admin'
+import { assertSafeTarget, deleteOrder, findOrders, redactOrder } from '@/lib/order-admin'
 import { extractSupabaseProjectRef } from '@/lib/supabase-project-ref'
 
 const REDACT_SESSION = 'task10-fixture-cs_test_redact'
 const REDACT_EMAIL = 'task10-fixture-redact@overprint.local'
 const LOOKUP_SESSION = 'task10-fixture-cs_test_lookup'
 const LOOKUP_EMAIL = 'task10-fixture-lookup@overprint.local'
+const DELETE_SESSION = 'task10-fixture-cs_test_delete'
+const DELETE_EMAIL = 'task10-fixture-delete@overprint.local'
 
 function fixtureOrderPayload(stripeCheckoutSessionId: string, email: string) {
   return {
@@ -73,6 +76,7 @@ describe('order-admin (Task 10)', () => {
   let payload: Payload
   let redactId: number
   let lookupId: number
+  let deleteId: number | undefined
 
   beforeAll(async () => {
     payload = await getPayload({ config })
@@ -93,9 +97,32 @@ describe('order-admin (Task 10)', () => {
   })
 
   afterAll(async () => {
-    for (const id of [redactId, lookupId]) {
+    for (const id of [redactId, lookupId, deleteId]) {
+      if (id === undefined) continue
       await payload.delete({ collection: 'orders', id, overrideAccess: true }).catch(() => {})
     }
+  })
+
+  it('deletes an order outright, for retention', async () => {
+    // Its own fixture, created here rather than in `beforeAll`: this is the one test
+    // whose subject is gone by the time it finishes, so it can't share one. `deleteId`
+    // is still recorded so `afterAll` cleans up if the delete is what failed.
+    const doomed = await payload.create({
+      collection: 'orders',
+      data: fixtureOrderPayload(DELETE_SESSION, DELETE_EMAIL),
+      overrideAccess: true,
+    })
+    deleteId = doomed.id
+
+    await deleteOrder(doomed.id)
+
+    const found = await payload.find({
+      collection: 'orders',
+      where: { stripeCheckoutSessionId: { equals: DELETE_SESSION } },
+      overrideAccess: true,
+    })
+    expect(found.totalDocs).toBe(0)
+    deleteId = undefined
   })
 
   it('redacts identity and keeps the transactional record', async () => {
@@ -256,5 +283,17 @@ describe('assertSafeTarget', () => {
 
     const stillIntact = await guardPayload.findByID({ collection: 'orders', id: guardOrderId, overrideAccess: true })
     expect(stillIntact.email).toBe(GUARD_EMAIL)
+  })
+
+  // The whole-branch review's Important 4: deletion is the only one of the three that
+  // cannot be undone, and until now it was the only one whose guard lived solely at
+  // prune-orders.ts's call site. This is the same test as the redaction one above, on
+  // the operation where a missing guard costs the row rather than a field.
+  it('refuses deleteOrder against a target the guard must reject, before it can delete', async () => {
+    env.SEED_DEV_PROJECT_REF = 'some-other-project-ref'
+    await expect(deleteOrder(guardOrderId)).rejects.toThrow(/does not match/)
+
+    const stillThere = await guardPayload.findByID({ collection: 'orders', id: guardOrderId, overrideAccess: true })
+    expect(stillThere.id).toBe(guardOrderId)
   })
 })

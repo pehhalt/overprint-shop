@@ -10,10 +10,10 @@
  * redacting a `createdAt`-anchored row up to a day or so earlier than a strict payment-date
  * reading of "2 years" would.
  *
- * Deleting is the one thing src/lib/order-admin.ts doesn't provide: `Orders`' collection-level
- * `delete` access is `() => false`. This calls the Local API directly with
- * `overrideAccess: true`, the same bypass redactOrder() already uses, rather than weakening
- * that access rule.
+ * Both writes go through src/lib/order-admin.ts — `deleteOrder` and `redactOrder` — which
+ * re-runs the target guard inside each one. The `assertSafeTarget()` call below is what
+ * turns a refusal into a readable message before anything is printed; the guards inside
+ * those two functions are what make the refusal hold even if this script forgot to.
  *
  * Without --confirm this only prints the plan and writes nothing. Run with:
  *
@@ -23,7 +23,7 @@
 import 'dotenv/config'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { assertSafeTarget, redactOrder } from '@/lib/order-admin'
+import { assertSafeTarget, deleteOrder, redactOrder } from '@/lib/order-admin'
 import { exitAfterWrite, hasConfirm, parseArgs, refuse } from './lib/order-admin-cli'
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
@@ -96,7 +96,7 @@ async function main() {
   let redactedCount = 0
   try {
     for (const order of staleUnpaid) {
-      await payload.delete({ collection: 'orders', id: order.id, overrideAccess: true })
+      await deleteOrder(order.id)
       deletedCount++
       console.log(`Deleted #${order.id}.`)
     }

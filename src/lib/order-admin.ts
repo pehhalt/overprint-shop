@@ -161,3 +161,28 @@ export async function redactOrder(id: number): Promise<Order> {
     },
   })
 }
+
+/**
+ * Deletes an order row outright. Retention (scripts/prune-orders.ts) is the only caller:
+ * a pending or expired order past 30 days is an abandoned checkout with no commercial or
+ * legal purpose, so unlike a paid order it is removed rather than redacted.
+ *
+ * This lives here, next to `redactOrder`, for the reason the whole-branch review gave:
+ * deletion is the one irreversible operation of the three, and it was the only one whose
+ * guard depended on the caller remembering to call it. `assertSafeTarget()` runs first
+ * here too, so the guard now holds by construction on the operation where getting it
+ * wrong cannot be undone.
+ *
+ * `Orders`' collection-level `delete` access is `() => false` — closed to the HTTP and
+ * admin paths, not to server-side tooling. `overrideAccess: true` is the same bypass
+ * `redactOrder` uses, and is preferable to weakening that access rule.
+ */
+export async function deleteOrder(id: number): Promise<void> {
+  assertSafeTarget()
+
+  // See the equivalent comment in findOrders() above — the same `config`, so the same
+  // PAYLOAD_LOG_TO_STDERR gating, applies here regardless of call order or `key`.
+  const payload = await getPayload({ config })
+
+  await payload.delete({ collection: 'orders', id, overrideAccess: true })
+}
