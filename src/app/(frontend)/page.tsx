@@ -1,41 +1,25 @@
-import { getPayload } from 'payload'
-import configPromise from '@payload-config'
-import Link from 'next/link'
-import { formatPrice, SHOP_NAME } from '@/lib/constants'
-import { ProductImage } from './ProductImage'
-
-export const dynamic = 'force-dynamic'
-
-export default async function CataloguePage() {
-  const payload = await getPayload({ config: configPromise })
-  const { docs: products } = await payload.find({
-    collection: 'products',
-    depth: 1,
-    limit: 20,
-  })
-
+// The start page. Deliberately just the banner for now — the rest of it is a
+// later round.
+//
+// A plain <img> rather than next/image, for the same reason the product images
+// use one: next/image re-encodes, and this project keeps original bytes. See
+// CLAUDE.md, "Never add image resizing".
+export default function StartPage() {
   return (
-    <main className="mx-auto max-w-4xl p-8">
-      <h1 className="text-3xl font-bold">{SHOP_NAME}</h1>
-      <p className="mt-2 text-neutral-600">Printed to order. Nothing sits in a warehouse.</p>
-
-      <ul className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {products.map((product) => (
-          <li key={product.id} className="rounded-lg border p-4">
-            <Link href={`/products/${product.slug}`}>
-              {typeof product.image === 'object' && product.image?.url && (
-                <ProductImage
-                  media={product.image}
-                  className="aspect-square w-full rounded object-cover"
-                />
-              )}
-              <h2 className="mt-3 font-medium">{product.name}</h2>
-              <p className="text-neutral-600">{formatPrice(product.price)}</p>
-              {product.soldOut && <p className="mt-1 text-sm font-medium">Sold out</p>}
-            </Link>
-          </li>
-        ))}
-      </ul>
+    <main>
+      <figure className="relative m-0">
+        <img
+          src="/shop-banner.png"
+          alt="A man in a black band t-shirt at a live gig, stage lights and a crowd behind him"
+          className="w-full object-cover"
+        />
+        {/* The banner is AI-generated, so it says so — legibly, in the
+            server-rendered page, and with enough contrast that it reads as a
+            label on the image rather than part of the artwork. */}
+        <figcaption className="absolute bottom-2 left-2 rounded bg-black/70 px-2 py-1 text-xs text-white">
+          AI-generated image
+        </figcaption>
+      </figure>
     </main>
   )
 }

@@ -77,6 +77,20 @@ sold.
 
    Visit `http://localhost:3000` for the storefront and `/admin` for the CMS.
 
+### Pages
+
+| Path | What it is |
+|---|---|
+| `/` | Start page — the banner, and more to come |
+| `/products` | The t-shirt catalogue |
+| `/products/<slug>` | One shirt: size, terms consent, buy |
+| `/legal` | Legal and privacy |
+| `/order/success` | Order confirmation, which decides nothing |
+
+A header (wordmark, and links to the catalogue and the legal page) and a footer sit
+on every storefront page and on none of `/admin` — both live in the `(frontend)`
+layout, which the `(payload)` route group never imports.
+
 ### Schema changes
 
 Payload's schema `push` mode is off everywhere (`push: false` in
