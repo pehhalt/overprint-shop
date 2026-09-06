@@ -11,10 +11,19 @@
  */
 import 'dotenv/config'
 import { assertSafeTarget, findOrders, redactOrder } from '@/lib/order-admin'
-import { describeTarget, hasConfirm, parseTarget, refuse } from './lib/order-admin-cli'
+import {
+  assertKnownFlags,
+  describeTarget,
+  exitAfterWrite,
+  hasConfirm,
+  initPayloadForScript,
+  parseTarget,
+  refuse,
+} from './lib/order-admin-cli'
 
 async function main() {
   const argv = process.argv.slice(2)
+  assertKnownFlags(argv, ['--email', '--session', '--confirm'])
   const target = parseTarget(argv)
 
   try {
@@ -23,11 +32,16 @@ async function main() {
     refuse(error)
   }
 
+  // Must run before findOrders()'s own getPayload({ config }) call — see
+  // initPayloadForScript()'s doc comment for why that ordering is what redirects
+  // Payload's logger away from stdout.
+  await initPayloadForScript()
+
   const orders = await findOrders(target)
 
   if (orders.length === 0) {
-    console.log(`No orders found matching ${describeTarget(target)}. Nothing to erase.`)
-    process.exit(0)
+    await exitAfterWrite(process.stdout, `No orders found matching ${describeTarget(target)}. Nothing to erase.\n`, 0)
+    return
   }
 
   console.log(`Plan: redact ${orders.length} order(s) matching ${describeTarget(target)}:`)
@@ -36,17 +50,31 @@ async function main() {
   }
 
   if (!hasConfirm(argv)) {
-    console.log('Dry run: nothing was written. Pass --confirm to redact the order(s) above.')
-    process.exit(0)
+    await exitAfterWrite(process.stdout, 'Dry run: nothing was written. Pass --confirm to redact the order(s) above.\n', 0)
+    return
   }
 
-  for (const order of orders) {
-    await redactOrder(order.id)
-    console.log(`Redacted #${order.id}.`)
+  // Once this loop starts, a thrown error no longer means nothing happened — reported
+  // separately from refuse() below so an operator can't read "Refused" and assume the
+  // orders logged before the failure weren't actually redacted.
+  let redactedCount = 0
+  try {
+    for (const order of orders) {
+      await redactOrder(order.id)
+      redactedCount++
+      console.log(`Redacted #${order.id}.`)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await exitAfterWrite(
+      process.stderr,
+      `Failed partway through erasure — ${redactedCount}/${orders.length} order(s) already redacted before this error: ${message}\n`,
+      1,
+    )
+    return
   }
 
-  console.log('Erasure complete.')
-  process.exit(0)
+  await exitAfterWrite(process.stdout, 'Erasure complete.\n', 0)
 }
 
 main().catch(refuse)

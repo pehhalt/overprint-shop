@@ -2,8 +2,13 @@
  * Retention (design doc §12): pending/expired orders are deleted after 30 days — they
  * accumulate on every abandoned checkout and have no commercial or legal purpose. Paid
  * orders are redacted, not deleted, after 2 years, by the same routine as erase-order.ts.
- * Age is measured from `createdAt`, which every order has; `paidAt` would be near-identical
- * for a paid order in practice but isn't set on the pending/expired ones this also prunes.
+ *
+ * Age is measured from `createdAt` for both, not `paidAt`, even for paid orders:
+ * `paid_at` is nullable in the schema (src/migrations/20260905_211217_orders.ts) while
+ * `created_at` is `NOT NULL`. A `paidAt`-based query would permanently skip any `paid`
+ * row that somehow has a null `paidAt` — an unbounded retention leak, strictly worse than
+ * redacting a `createdAt`-anchored row up to a day or so earlier than a strict payment-date
+ * reading of "2 years" would.
  *
  * Deleting is the one thing src/lib/order-admin.ts doesn't provide: `Orders`' collection-level
  * `delete` access is `() => false`. This calls the Local API directly with
@@ -16,24 +21,30 @@
  *   npm run prune:orders -- --confirm     (deletes/redacts)
  */
 import 'dotenv/config'
-import { getPayload } from 'payload'
-import config from '@payload-config'
 import { assertSafeTarget, redactOrder } from '@/lib/order-admin'
-import { hasConfirm, refuse } from './lib/order-admin-cli'
+import { assertKnownFlags, exitAfterWrite, hasConfirm, initPayloadForScript, refuse } from './lib/order-admin-cli'
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
 const TWO_YEARS_MS = 2 * 365 * 24 * 60 * 60 * 1000
 
 async function main() {
+  const argv = process.argv.slice(2)
+  // No --email/--session: unlike its siblings, prune-orders.ts isn't scoped to one
+  // subject — it acts on every stale order in the database. Fix round 2 found that
+  // passing one of the sibling scripts' flags here (a natural mistake, since all three
+  // share a package.json section) was silently ignored rather than refused, so an
+  // operator who assumed prune scoped the way erase does could prune the whole database.
+  assertKnownFlags(argv, ['--confirm'])
+
   try {
     assertSafeTarget()
   } catch (error) {
     refuse(error)
   }
 
-  const confirm = hasConfirm(process.argv.slice(2))
+  const confirm = hasConfirm(argv)
   const now = Date.now()
-  const payload = await getPayload({ config })
+  const payload = await initPayloadForScript()
 
   const { docs: staleUnpaid } = await payload.find({
     collection: 'orders',
@@ -65,22 +76,40 @@ async function main() {
   for (const order of stalePaid) console.log(`  redact #${order.id} created=${order.createdAt}`)
 
   if (!confirm) {
-    console.log('Dry run: nothing was written. Pass --confirm to apply the plan above.')
-    process.exit(0)
+    await exitAfterWrite(process.stdout, 'Dry run: nothing was written. Pass --confirm to apply the plan above.\n', 0)
+    return
   }
 
-  for (const order of staleUnpaid) {
-    await payload.delete({ collection: 'orders', id: order.id, overrideAccess: true })
-    console.log(`Deleted #${order.id}.`)
+  // Once this loop starts, a thrown error no longer means nothing happened — reported
+  // separately from refuse() below, with a count of what already committed, so an
+  // operator can't read "Refused" and assume none of the deletions/redactions above
+  // actually landed.
+  let deletedCount = 0
+  let redactedCount = 0
+  try {
+    for (const order of staleUnpaid) {
+      await payload.delete({ collection: 'orders', id: order.id, overrideAccess: true })
+      deletedCount++
+      console.log(`Deleted #${order.id}.`)
+    }
+
+    for (const order of stalePaid) {
+      await redactOrder(order.id)
+      redactedCount++
+      console.log(`Redacted #${order.id}.`)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await exitAfterWrite(
+      process.stderr,
+      `Failed partway through pruning — ${deletedCount}/${staleUnpaid.length} deletion(s) and ` +
+        `${redactedCount}/${stalePaid.length} redaction(s) already committed before this error: ${message}\n`,
+      1,
+    )
+    return
   }
 
-  for (const order of stalePaid) {
-    await redactOrder(order.id)
-    console.log(`Redacted #${order.id}.`)
-  }
-
-  console.log('Prune complete.')
-  process.exit(0)
+  await exitAfterWrite(process.stdout, 'Prune complete.\n', 0)
 }
 
 main().catch(refuse)

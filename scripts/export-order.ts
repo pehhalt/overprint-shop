@@ -11,10 +11,12 @@
  */
 import 'dotenv/config'
 import { assertSafeTarget, findOrders } from '@/lib/order-admin'
-import { describeTarget, parseTarget, refuse } from './lib/order-admin-cli'
+import { assertKnownFlags, describeTarget, exitAfterWrite, initPayloadForScript, parseTarget, refuse } from './lib/order-admin-cli'
 
 async function main() {
-  const target = parseTarget(process.argv.slice(2))
+  const argv = process.argv.slice(2)
+  assertKnownFlags(argv, ['--email', '--session'])
+  const target = parseTarget(argv)
 
   try {
     assertSafeTarget()
@@ -22,14 +24,21 @@ async function main() {
     refuse(error)
   }
 
+  // Must run before findOrders()'s own getPayload({ config }) call — see
+  // initPayloadForScript()'s doc comment for why that ordering is what redirects
+  // Payload's logger away from stdout.
+  await initPayloadForScript()
+
   console.error(`Looking up orders matching ${describeTarget(target)}...`)
 
   const orders = await findOrders(target)
 
   console.error(`Found ${orders.length} order(s). Writing JSON to stdout.`)
 
-  console.log(JSON.stringify(orders, null, 2))
-  process.exit(0)
+  // exitAfterWrite, not console.log + process.exit: this is the payload the whole script
+  // exists to deliver, and it has no upper bound on size — a subject with enough orders
+  // to exceed the stdout buffer must not come back truncated with a silent exit 0.
+  await exitAfterWrite(process.stdout, JSON.stringify(orders, null, 2) + '\n', 0)
 }
 
 main().catch(refuse)

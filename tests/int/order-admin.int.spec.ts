@@ -197,7 +197,12 @@ describe('assertSafeTarget', () => {
   })
 
   afterAll(async () => {
-    await guardPayload.delete({ collection: 'orders', id: guardOrderId, overrideAccess: true }).catch(() => {})
+    // Unlike the Task 10 describe block's afterAll above, a failed cleanup here is
+    // surfaced rather than swallowed: it's cheap, and a silently orphaned
+    // `task11-fixture-*` row in the shared dev database is otherwise invisible.
+    await guardPayload.delete({ collection: 'orders', id: guardOrderId, overrideAccess: true }).catch((error) => {
+      console.warn(`Failed to clean up guard fixture order #${guardOrderId}: ${error}`)
+    })
   })
 
   it('does not throw against the real development target', () => {
@@ -237,7 +242,10 @@ describe('assertSafeTarget', () => {
   // would leave the rest of this suite green, since every other test here runs against the
   // real, valid dev target. These two point the guard's own inputs at a rejectable target
   // and call the exported functions directly, so a stripped-out internal call fails here.
-  it('refuses findOrders against a target the guard must reject, before it can query', async () => {
+  // Unlike its sibling below, this can't also assert "nothing was read": findOrders is a
+  // pure read with no side effect to inspect afterward. The promise rejecting before
+  // resolving to any rows is the entire observable proof that the query never ran.
+  it('refuses findOrders against a target the guard must reject', async () => {
     env.SEED_DEV_PROJECT_REF = 'some-other-project-ref'
     await expect(findOrders({ email: GUARD_EMAIL })).rejects.toThrow(/does not match/)
   })
