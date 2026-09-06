@@ -3,7 +3,7 @@ export const metadata = { title: 'Legal & privacy' }
 
 export default function LegalPage() {
   return (
-    <main className="mx-auto max-w-4xl p-8">
+    <main className="mx-auto max-w-4xl p-8 pt-4">
       <Breadcrumbs trail={[{ label: 'Legal & privacy' }]} />
       <h1 className="text-2xl font-bold">Legal & privacy</h1>
 
