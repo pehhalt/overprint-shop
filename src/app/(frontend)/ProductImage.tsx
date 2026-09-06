@@ -8,9 +8,14 @@ type ProductImageProps = {
 }
 
 export function ProductImage({ media, className }: ProductImageProps) {
+  // An empty `src` is not a blank image: the browser resolves it to the current document
+  // and re-requests the page. Both call sites happen to guard first, so this is
+  // unreachable today — but the fix belongs here once, not in every future caller.
+  if (!media.url) return null
+
   return (
     <figure>
-      <img src={media.url ?? ''} alt={media.alt} className={className} />
+      <img src={media.url} alt={media.alt} className={className} />
       {media.generatedBy === 'ai' && (
         <figcaption className="mt-1 text-xs text-neutral-600">AI-generated image</figcaption>
       )}
