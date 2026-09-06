@@ -85,6 +85,19 @@ removing a collection field requires a real migration. See the **"Schema
 changes: migrate, never push"** section of [`CLAUDE.md`](./CLAUDE.md) for why,
 and for the exact commands.
 
+**Running `payload migrate` locally changes what the sandbox deployment reads.**
+Preview and local development share one development Supabase project (see
+[Environment separation](#environment-separation)), so a migration run on your
+machine applies to the database `overprint-staging.vercel.app` is already
+serving. Adding a column is harmless — the deployed code simply never selects
+it. Renaming or dropping one takes the storefront down with a
+`column ... does not exist` error until the code that matches the new schema is
+deployed; `/admin` keeps answering, because it does not run the catalogue query.
+That window is expected, and it closes when the pull request lands. Don't
+hand-edit the database to close it early. If you need a working sandbox in the
+meantime, deploy the branch to its own preview URL with `vercel deploy` and
+leave the staging alias where it is.
+
 ## The two-card test
 
 Manual, human-visible proof that the payment logic actually gates on Stripe's

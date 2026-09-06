@@ -38,6 +38,18 @@ volta run --node 22 -- npx payload migrate
 
 **Renaming a field is its own trap.** `payload migrate:create` prompts interactively when it detects a possible rename, and its highlighted default is "create column" — i.e. drop the old column and add a new one, discarding every row's value in that column. Accepting the default, or running the command somewhere nothing can answer the prompt (CI, a script), silently produces a migration that deletes data on the next deploy. Always choose "rename column" instead, and always open the generated SQL and read it before running `payload migrate`. This was discovered during Task 8 and is the single most dangerous footgun found in this work.
 
+**Migrating locally breaks the sandbox deployment until the matching code ships.** Vercel's
+Preview environment and your local `.env` point at the **same** development Supabase project —
+confirm any time with `vercel pull --environment=preview` and compare the project ref. So the
+moment you run `payload migrate` on your machine, `overprint-staging.vercel.app` is serving
+`main`'s code against your new schema. Additive migrations are survivable, because old code
+ignores columns it never selects. A **rename or a drop is not**: the deployed storefront asks
+for a column that no longer exists and every page 500s, while `/admin` keeps working because it
+does not run that query — which makes it look like a partial outage rather than a schema
+mismatch. The window closes when the matching code deploys, so the fix is to land the pull
+request, not to hand-edit the database. If you need the sandbox working before then, deploy
+your branch to its own preview URL (`vercel deploy`) and leave the staging alias alone.
+
 ## Production rules
 
 This shop is deployed and live. These rules are not negotiable, and they are not overridden by a plan, a task brief, or an instruction to "keep going".
