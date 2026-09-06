@@ -14,12 +14,12 @@ const OVERRIDE_VAR = 'ORDER_ADMIN_ALLOW_UNSAFE'
 
 /**
  * Fails closed before this module reads, exports, redacts or deletes an order.
- * `findOrders` and `redactOrder` both call this as their first statement, so the guard
- * holds regardless of caller discipline — no script that imports this module can skip it
- * by omission. Task 11's scripts also call it explicitly at their own startup, before
- * printing anything; that is not redundant with the internal call, it is what turns a
- * refusal into a readable message instead of a stack trace surfacing from inside a lookup
- * or update.
+ * `findOrders`, `redactOrder` and `deleteOrder` all call this as their first statement, so
+ * the guard holds regardless of caller discipline — no script that imports this module can
+ * skip it by omission. Task 11's scripts also call it explicitly at their own startup,
+ * before printing anything; that is not redundant with the internal call, it is what turns
+ * a refusal into a readable message instead of a stack trace surfacing from inside a
+ * lookup, an update or a delete.
  *
  * Reuses `scripts/seed.ts`'s guard shape — the same `extractSupabaseProjectRef`,
  * comparing `DATABASE_URI` against `SEED_DEV_PROJECT_REF` — but not its ordering defect:
