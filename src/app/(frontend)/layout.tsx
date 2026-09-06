@@ -1,6 +1,7 @@
 import React from 'react'
 import './styles.css'
 import { DemoBanner } from './DemoBanner'
+import { SiteHeader } from './SiteHeader'
 import { SiteFooter } from './SiteFooter'
 
 export const metadata = {
@@ -15,6 +16,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
     <html lang="en">
       <body>
         <DemoBanner />
+        <SiteHeader />
         {children}
         <SiteFooter />
       </body>

@@ -1,3 +1,4 @@
+import { Breadcrumbs } from '../../Breadcrumbs'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import Link from 'next/link'
@@ -20,6 +21,7 @@ export const metadata = {
 function NoOrder({ heading }: { heading: string }) {
   return (
     <main className="mx-auto max-w-xl p-8">
+      <Breadcrumbs trail={[{ label: 'Order confirmation' }]} />
       <h1 className="text-2xl font-bold">{heading}</h1>
       <Link href="/" className="mt-4 inline-block underline">
         Back to the shop
@@ -36,11 +38,12 @@ function NoOrder({ heading }: { heading: string }) {
 function ExpiredLink() {
   return (
     <main className="mx-auto max-w-xl p-8">
+      <Breadcrumbs trail={[{ label: 'Order confirmation' }]} />
       <h1 className="text-2xl font-bold">This confirmation link has expired</h1>
       <p className="mt-2 text-neutral-600">
-        Confirmation links are only valid for 30 minutes after checkout, to keep order details
-        from staying accessible indefinitely. Please start again from the shop if you still need
-        to make a purchase.
+        Confirmation links are only valid for 30 minutes after checkout, to keep order details from
+        staying accessible indefinitely. Please start again from the shop if you still need to make
+        a purchase.
       </p>
       <Link href="/" className="mt-4 inline-block underline">
         Back to the shop
@@ -78,10 +81,11 @@ export default async function SuccessPage({
   if (order.status === 'expired') {
     return (
       <main className="mx-auto max-w-xl p-8">
+        <Breadcrumbs trail={[{ label: 'Order confirmation' }]} />
         <h1 className="text-2xl font-bold">This checkout expired</h1>
         <p className="mt-2 text-neutral-600">
-          The payment session timed out before it was completed. No charge was made — please
-          start again from the shop.
+          The payment session timed out before it was completed. No charge was made — please start
+          again from the shop.
         </p>
         <Link href="/" className="mt-4 inline-block underline">
           Back to the shop
@@ -94,14 +98,15 @@ export default async function SuccessPage({
 
   return (
     <main className="mx-auto max-w-xl p-8">
+      <Breadcrumbs trail={[{ label: 'Order confirmation' }]} />
       <h1 className="text-2xl font-bold">
         {isPaid ? 'Thank you — your order is paid' : 'Confirming your payment…'}
       </h1>
 
       {!isPaid && (
         <p className="mt-2 text-neutral-600">
-          Stripe is confirming this payment with us. This usually takes a few seconds — refresh
-          this page in a moment.
+          Stripe is confirming this payment with us. This usually takes a few seconds — refresh this
+          page in a moment.
         </p>
       )}
 

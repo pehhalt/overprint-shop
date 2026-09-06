@@ -1,1 +1,10 @@
 @import 'tailwindcss';
+
+/* Reserve the scrollbar's width on every page, whether or not that page
+   scrolls. Without it a long page (/legal) is ~15px narrower than a short one
+   (/products) on any platform with classic scrollbars, so centred content
+   shifts sideways as you navigate between them. Headless Chromium uses overlay
+   scrollbars and does not show the problem; Windows browsers do. */
+html {
+  scrollbar-gutter: stable;
+}
