@@ -50,7 +50,11 @@ export default function LegalPage() {
         Supabase process all of it as our processors, acting only on our instructions. Stripe
         processes payment data as an independent controller, and performs its own fraud screening
         on it under its own legitimate interests — it decides its own purposes and means for that
-        data, so it answers for it on its own terms, not ours.
+        data, so it answers for it on its own terms, not ours. Because it decides those purposes
+        itself, Stripe&rsquo;s checkout page may ask you for details we never requested and never
+        receive — a phone number, for example, if you choose to let Stripe save your payment
+        details for future purchases. Those go to Stripe alone: we ask only for what is listed
+        above, and this shop has nowhere to store a phone number.
       </p>
       <p className="mt-2 text-neutral-700">
         Data is stored in AWS eu-west-1, with serverless functions pinned to the dub1 region. Our
