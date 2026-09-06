@@ -279,10 +279,11 @@ Sections, in this order:
      ever needed, only RFC 2606 reserved domains (`example.com`) are safe.
    - **Never a fabricated address that looks real.**
 
-   **This is an input the implementation cannot invent.** The owner supplies the address and
-   the name form to publish. Implementation stops and asks rather than guessing. The name
-   need not be a full legal name — this is not an Impressum (§2); something identifying the
-   person and the context, such as a first name plus "student project", is sufficient.
+   **The address is `overprintdemoshop@gmail.com`** — a separate account created for this
+   shop, so it is genuinely reachable and can be abandoned without touching the owner's
+   primary mailbox.
+
+   The published name is recorded in §17 below.
 3. **AI-generated images.** See §9.
 4. **Privacy.** Covering, in plain language: what is collected (email, name, shipping
    address, order contents — and card details by Stripe, never by us); why; the lawful
@@ -426,3 +427,29 @@ analysis are a good-faith reading informed by two automated audits, and both aud
 plainly that they are a first-pass signal rather than a substitute for a qualified lawyer.
 For a demonstration shop that sells nothing, that is a proportionate position. It would not
 be, for a shop taking real money.
+
+---
+
+## 17. Inputs supplied by the owner
+
+These cannot be invented by an implementer and are recorded here so the legal page can be
+written without stopping to ask again.
+
+| | Value |
+|---|---|
+| Published name | **Overprint — a student project by Peter** |
+| Contact email | **overprintdemoshop@gmail.com** |
+
+The email is a separate account created for this shop: genuinely reachable, and abandonable
+without touching a primary mailbox. It must appear verbatim; no placeholder, no obfuscation
+that breaks `mailto:`.
+
+The name leads with the shop and attributes the person, rather than presenting an individual
+as a trader. That is the honest framing for something that sells nothing, and it identifies
+a real human without publishing a full legal name — proportionate given §2's decision not to
+publish an Impressum.
+
+**A standing caveat for whoever maintains this:** if the shop ever becomes commercial, both
+of these become insufficient. A trading business needs a full Impressum under §5 DDG with a
+legal name and postal address, and a contact route that is actually monitored. These values
+are right for a demonstration and wrong for a shop.
