@@ -2,7 +2,7 @@ export const metadata = { title: 'Legal & privacy' }
 
 export default function LegalPage() {
   return (
-    <main className="mx-auto max-w-2xl p-8">
+    <main className="mx-auto max-w-4xl p-8">
       <h1 className="text-2xl font-bold">Legal & privacy</h1>
 
       <h2 className="mt-8 text-lg font-semibold">What this is</h2>
