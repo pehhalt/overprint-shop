@@ -204,6 +204,14 @@ export interface Order {
   stripeCheckoutSessionId: string;
   stripePaymentIntentId?: string | null;
   email?: string | null;
+  shippingName?: string | null;
+  shippingAddress?: {
+    line1?: string | null;
+    line2?: string | null;
+    city?: string | null;
+    postalCode?: string | null;
+    country?: string | null;
+  };
   status: 'pending' | 'paid' | 'expired';
   /**
    * Total charged, in cents.
@@ -378,6 +386,16 @@ export interface OrdersSelect<T extends boolean = true> {
   stripeCheckoutSessionId?: T;
   stripePaymentIntentId?: T;
   email?: T;
+  shippingName?: T;
+  shippingAddress?:
+    | T
+    | {
+        line1?: T;
+        line2?: T;
+        city?: T;
+        postalCode?: T;
+        country?: T;
+      };
   status?: T;
   amountTotal?: T;
   paidAt?: T;

@@ -54,6 +54,8 @@ const SESSION_UNPAID = 'cs_test_task11_unpaid'
 const SESSION_UNRELATED = 'cs_test_task11_unrelated_event'
 const SESSION_EXPIRING = 'cs_test_task11_expiring'
 const SESSION_ORPHAN = 'cs_test_task11_no_matching_order'
+const SESSION_SHIPPING = 'cs_test_task11_shipping_collected_information'
+const SESSION_SHIPPING_LEGACY = 'cs_test_task11_shipping_legacy_shape'
 
 const ALL_FIXTURE_SESSION_IDS = [
   SESSION_MISSING_SIG,
@@ -62,6 +64,8 @@ const ALL_FIXTURE_SESSION_IDS = [
   SESSION_UNPAID,
   SESSION_UNRELATED,
   SESSION_EXPIRING,
+  SESSION_SHIPPING,
+  SESSION_SHIPPING_LEGACY,
   // SESSION_ORPHAN deliberately excluded — no order is ever created for it,
   // and it must stay that way.
 ]
@@ -284,5 +288,45 @@ describe('POST /shop/stripe-webhook (Task 11)', () => {
     } finally {
       errorSpy.mockRestore()
     }
+  })
+
+  it('9. stores the shipping address from collected_information', async () => {
+    const event = completedEvent(SESSION_SHIPPING, 'paid')
+    ;(event.data.object as Record<string, unknown>).collected_information = {
+      shipping_details: {
+        name: 'Erika Mustermann',
+        address: {
+          line1: 'Musterstraße 1', line2: null, city: 'Berlin',
+          postal_code: '10115', country: 'DE',
+        },
+      },
+    }
+
+    const response = await POST(signedRequest(event))
+    expect(response.status).toBe(200)
+
+    const order = await findOrderBySessionId(payload, SESSION_SHIPPING)
+    expect(order?.shippingName).toBe('Erika Mustermann')
+    expect(order?.shippingAddress?.city).toBe('Berlin')
+    expect(order?.shippingAddress?.postalCode).toBe('10115')
+    expect(order?.shippingAddress?.country).toBe('DE')
+  })
+
+  it('10. ignores a top-level shipping_details, which is the pre-Basil shape', async () => {
+    const event = completedEvent(SESSION_SHIPPING_LEGACY, 'paid')
+    // Stripe moved this field into collected_information in the Basil API version. This
+    // endpoint is pinned after that, so the old path must NOT be read. A handler that read
+    // it would pass a test written in the same shape and silently store nothing in
+    // production — which is exactly the failure this test exists to prevent.
+    ;(event.data.object as Record<string, unknown>).shipping_details = {
+      name: 'Wrong Path', address: { line1: 'Nowhere', city: 'Nowhere', country: 'DE' },
+    }
+
+    const response = await POST(signedRequest(event))
+    expect(response.status).toBe(200)
+
+    const order = await findOrderBySessionId(payload, SESSION_SHIPPING_LEGACY)
+    expect(order?.status).toBe('paid')
+    expect(order?.shippingName).toBeFalsy()
   })
 })

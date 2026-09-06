@@ -29,6 +29,18 @@ export const Orders: CollectionConfig = {
     },
     { name: 'stripePaymentIntentId', type: 'text' },
     { name: 'email', type: 'email' },
+    { name: 'shippingName', type: 'text' },
+    {
+      name: 'shippingAddress',
+      type: 'group',
+      fields: [
+        { name: 'line1', type: 'text' },
+        { name: 'line2', type: 'text' },
+        { name: 'city', type: 'text' },
+        { name: 'postalCode', type: 'text' },
+        { name: 'country', type: 'text' },
+      ],
+    },
     {
       name: 'status',
       type: 'select',

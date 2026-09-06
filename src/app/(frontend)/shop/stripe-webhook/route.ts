@@ -85,6 +85,11 @@ export async function POST(req: Request) {
   if (session.payment_status !== 'paid') return ok()
   if (order.status === 'paid') return ok() // Stripe retries; this must be idempotent.
 
+  // Stripe moved this from the top level to collected_information in the Basil API
+  // version (2025-03-31). This endpoint is pinned to 2026-08-26.dahlia, so the old
+  // path yields undefined — and that is the path most documentation still shows.
+  const shipping = session.collected_information?.shipping_details
+
   await payload.update({
     collection: 'orders',
     id: order.id,
@@ -95,6 +100,16 @@ export async function POST(req: Request) {
       stripePaymentIntentId:
         typeof session.payment_intent === 'string' ? session.payment_intent : undefined,
       email: session.customer_details?.email ?? undefined,
+      shippingName: shipping?.name ?? undefined,
+      shippingAddress: shipping?.address
+        ? {
+            line1: shipping.address.line1 ?? undefined,
+            line2: shipping.address.line2 ?? undefined,
+            city: shipping.address.city ?? undefined,
+            postalCode: shipping.address.postal_code ?? undefined,
+            country: shipping.address.country ?? undefined,
+          }
+        : undefined,
     },
   })
 
