@@ -58,3 +58,46 @@ test('the start page shows the banner, labelled as AI-generated', async ({ page 
   // hover state — the disclosure is for whoever looks at the image.
   await expect(page.getByText('AI-generated image', { exact: true })).toBeVisible()
 })
+
+// The active link is marked with aria-current="page" rather than by asserting on
+// a colour: that is the semantic a screen reader reads, and a CSS-only state
+// would leave assistive technology with nothing to announce.
+test('the current section is marked in the navigation', async ({ page }) => {
+  const nav = () => page.getByRole('banner')
+
+  await page.goto('/products')
+  await expect(nav().getByRole('link', { name: 'T-shirts', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+
+  // A product page is still inside the catalogue section.
+  await page.goto('/products/midnight-tee')
+  await expect(nav().getByRole('link', { name: 'T-shirts', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+
+  await page.goto('/legal')
+  await expect(nav().getByRole('link', { name: 'Legal & privacy', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  await expect(nav().getByRole('link', { name: 'T-shirts', exact: true })).not.toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+})
+
+test('nothing is marked current on the start page, which the logo owns', async ({ page }) => {
+  await page.goto('/')
+  const nav = page.getByRole('banner')
+  await expect(nav.getByRole('link', { name: 'T-shirts', exact: true })).not.toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  await expect(nav.getByRole('link', { name: 'Legal & privacy', exact: true })).not.toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+})
