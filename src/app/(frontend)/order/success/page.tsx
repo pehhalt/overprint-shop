@@ -109,7 +109,9 @@ export default async function SuccessPage({
         {order.items?.map((item, index) => (
           <li key={index} className="flex justify-between p-4">
             <span>
-              {item.nameSnapshot} × {item.quantity}
+              {item.nameSnapshot}
+              {/* Omitted rather than shown blank for orders placed before sizes existed. */}
+              {item.sizeSnapshot ? `, size ${item.sizeSnapshot}` : ''} × {item.quantity}
             </span>
             <span>{formatPrice(item.unitAmountSnapshot)}</span>
           </li>

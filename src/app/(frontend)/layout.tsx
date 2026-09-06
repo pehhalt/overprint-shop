@@ -1,6 +1,7 @@
 import React from 'react'
 import './styles.css'
 import { DemoBanner } from './DemoBanner'
+import { SiteFooter } from './SiteFooter'
 
 export const metadata = {
   description: 'Overprint - print-on-demand t-shirts, printed to order.',
@@ -15,6 +16,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
       <body>
         <DemoBanner />
         {children}
+        <SiteFooter />
       </body>
     </html>
   )
