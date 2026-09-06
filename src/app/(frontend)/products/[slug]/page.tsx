@@ -1,3 +1,4 @@
+import { Breadcrumbs } from '../../Breadcrumbs'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { notFound } from 'next/navigation'
@@ -22,6 +23,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   return (
     <main className="mx-auto grid max-w-4xl gap-8 p-8 md:grid-cols-2">
+      {/* main is a two-column grid, so the trail spans both rather than
+          becoming a column of its own */}
+      <div className="md:col-span-2">
+        <Breadcrumbs trail={[{ label: 'T-shirts', href: '/products' }, { label: product.name }]} />
+      </div>
       {typeof product.image === 'object' && product.image?.url && (
         <ProductImage
           media={product.image}

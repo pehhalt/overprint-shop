@@ -1,3 +1,4 @@
+import { Breadcrumbs } from '../Breadcrumbs'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import Link from 'next/link'
@@ -16,6 +17,7 @@ export default async function CataloguePage() {
 
   return (
     <main className="mx-auto max-w-4xl p-8">
+      <Breadcrumbs trail={[{ label: 'T-shirts' }]} />
       <h1 className="text-3xl font-bold">T-Shirts</h1>
       <p className="mt-2 text-neutral-600">Printed to order. Nothing sits in a warehouse.</p>
 

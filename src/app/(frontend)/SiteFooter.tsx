@@ -8,7 +8,7 @@ export function SiteFooter() {
   return (
     <footer className="mt-12 border-t px-4 py-6 text-center text-sm text-neutral-600">
       <p>
-        {SHOP_NAME} ·{' '}
+        {SHOP_NAME} &copy; 2026 ·{' '}
         <Link href="/legal" className="underline">
           Legal & privacy
         </Link>
