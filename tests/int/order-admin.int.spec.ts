@@ -16,8 +16,10 @@
  * 'production'` is checked first, unconditionally, before anything reads
  * `ORDER_ADMIN_ALLOW_UNSAFE` — proven below by setting the override and still expecting
  * a refusal. `findOrders` and `redactOrder` both call the guard as their first
- * statement (fix round 1), so this passes against the real dev database on every run
- * here without either test needing to call it itself.
+ * statement (fix round 1); the `assertSafeTarget` describe block below proves that
+ * directly by pointing the guard's own inputs at a rejectable target and calling
+ * `findOrders`/`redactOrder` themselves, rather than trusting that the guard is still
+ * wired in because the rest of the suite passes against the real dev database.
  *
  * Two fixture orders are used, not one: the redaction test mutates its fixture's email
  * away, so a second, never-redacted fixture backs the lookup test. Both carry every
@@ -175,6 +177,29 @@ describe('assertSafeTarget', () => {
     }
   })
 
+  // Own fixture, separate from the Task 10 describe above: that block's `payload`,
+  // `redactId` and `lookupId` are scoped to its own callback and one of them is redacted
+  // by the time its tests finish, so neither is reusable here to prove a write never
+  // landed.
+  const GUARD_SESSION = 'task11-fixture-cs_test_guard'
+  const GUARD_EMAIL = 'task11-fixture-guard@overprint.local'
+  let guardPayload: Payload
+  let guardOrderId: number
+
+  beforeAll(async () => {
+    guardPayload = await getPayload({ config })
+    const fixture = await guardPayload.create({
+      collection: 'orders',
+      data: fixtureOrderPayload(GUARD_SESSION, GUARD_EMAIL),
+      overrideAccess: true,
+    })
+    guardOrderId = fixture.id
+  })
+
+  afterAll(async () => {
+    await guardPayload.delete({ collection: 'orders', id: guardOrderId, overrideAccess: true }).catch(() => {})
+  })
+
   it('does not throw against the real development target', () => {
     expect(() => assertSafeTarget()).not.toThrow()
   })
@@ -204,5 +229,24 @@ describe('assertSafeTarget', () => {
     env.SEED_DEV_PROJECT_REF = 'some-other-project-ref'
     env.ORDER_ADMIN_ALLOW_UNSAFE = '1'
     expect(() => assertSafeTarget()).not.toThrow()
+  })
+
+  // Task 10's review found that only a deleted throwaway script had ever proven the
+  // *internal* assertSafeTarget() calls inside findOrders/redactOrder — no committed test
+  // called them against a bad target. A regression that removed those internal calls
+  // would leave the rest of this suite green, since every other test here runs against the
+  // real, valid dev target. These two point the guard's own inputs at a rejectable target
+  // and call the exported functions directly, so a stripped-out internal call fails here.
+  it('refuses findOrders against a target the guard must reject, before it can query', async () => {
+    env.SEED_DEV_PROJECT_REF = 'some-other-project-ref'
+    await expect(findOrders({ email: GUARD_EMAIL })).rejects.toThrow(/does not match/)
+  })
+
+  it('refuses redactOrder against a target the guard must reject, before it can write', async () => {
+    env.SEED_DEV_PROJECT_REF = 'some-other-project-ref'
+    await expect(redactOrder(guardOrderId)).rejects.toThrow(/does not match/)
+
+    const stillIntact = await guardPayload.findByID({ collection: 'orders', id: guardOrderId, overrideAccess: true })
+    expect(stillIntact.email).toBe(GUARD_EMAIL)
   })
 })

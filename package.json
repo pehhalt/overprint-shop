@@ -19,7 +19,10 @@
     "generate:types": "payload generate:types",
     "generate:importmap": "payload generate:importmap",
     "payload": "payload",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx scripts/seed.ts",
+    "export:order": "tsx scripts/export-order.ts",
+    "erase:order": "tsx scripts/erase-order.ts",
+    "prune:orders": "tsx scripts/prune-orders.ts"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.88.0",
