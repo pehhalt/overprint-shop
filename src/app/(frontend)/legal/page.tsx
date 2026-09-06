@@ -52,8 +52,9 @@ export default function LegalPage() {
         Data is stored in AWS eu-west-1, with serverless functions pinned to the dub1 region. Our
         retention targets: unpaid orders are removed after 30 days, and paid orders are kept for 2
         years, after which they are redacted — their identity details (email, name, address)
-        cleared, leaving only the amount and date as a commercial record. This is carried out by an
-        operator running a script by hand on that schedule; it is not an automated job.
+        cleared, leaving only the amount and date as a commercial record. Enforcement is manual and
+        operator-initiated, not automated — and since the maintenance script that applies these
+        limits is still being built, nothing is purged or redacted on a schedule today.
       </p>
       <p className="mt-2 text-neutral-700">
         To exercise your rights of access, rectification, erasure, or portability, email the
