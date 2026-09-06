@@ -202,6 +202,44 @@ describe('POST /shop/stripe-webhook (Task 11)', () => {
     expect(after?.status).toBe('pending')
   })
 
+  it('2b. logs no customer data when a signature fails, only the message', async () => {
+    // Stripe's StripeSignatureVerificationError carries the raw request body on
+    // `error.payload`, and console.error prints an error's own properties — so
+    // logging the object put the customer's email and shipping address into the
+    // platform log on every failed delivery. Platform logs are outside the reach
+    // of erase:order, so that data would survive an erasure request.
+    const event = completedEvent(SESSION_WRONG_SECRET, 'paid')
+    const session = event.data.object as Record<string, unknown>
+    session.customer_details = { email: 'leak-canary@example.com' }
+    session.collected_information = {
+      shipping_details: {
+        name: 'Leak Canary',
+        address: { line1: 'Canary Street 1', city: 'Berlin', postal_code: '10115', country: 'DE' },
+      },
+    }
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const response = await POST(signedRequest(event, WRONG_SECRET))
+      expect(response.status).toBe(400)
+
+      expect(errorSpy).toHaveBeenCalled()
+      // Serialise everything handed to console.error the way a log collector
+      // would, then assert none of the personal data survived into it.
+      const logged = errorSpy.mock.calls.flat().map((arg) => {
+        if (arg instanceof Error) return `${arg.message} ${JSON.stringify(arg, Object.getOwnPropertyNames(arg))}`
+        return typeof arg === 'string' ? arg : JSON.stringify(arg)
+      }).join(' ')
+
+      expect(logged).not.toContain('leak-canary@example.com')
+      expect(logged).not.toContain('Leak Canary')
+      expect(logged).not.toContain('Canary Street 1')
+      expect(logged).not.toContain('10115')
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
   it('3. marks the order paid on a verified completed session, setting paidAt and stripePaymentIntentId', async () => {
     const response = await POST(signedRequest(completedEvent(SESSION_PAID, 'paid')))
 

@@ -23,6 +23,134 @@ sold.
 - **Vitest** (unit + integration) and **Playwright** (e2e) for tests
 - **GitHub Actions** for CI and for deploys — see [the pipeline](#deployment-pipeline) below
 
+## Architecture
+
+Four services, each doing one job. GitHub decides *when* something ships, Vercel runs it,
+Supabase holds the data, Stripe takes the money, and Vercel Blob stores the images.
+
+### How a change reaches the live site
+
+```mermaid
+flowchart TD
+    Dev([👤 Developer]) -->|feature branch| PR[🔀 Pull request into main]
+    PR --> CI[🧪 ci.yml<br/>install · typecheck · lint · unit tests · build]
+    CI -->|green| H1{👤 Human merges it<br/>agents open, never merge}
+    H1 --> Main[[🌿 main]]
+
+    Main --> WPrev[⚙️ deploy-preview.yml]
+    WPrev --> B1[🏗️ npm run build<br/>payload migrate → next build]
+    B1 --> DevDB[(🗄️ Supabase<br/>development project)]
+    B1 --> VPrev[▲ Vercel Preview<br/>overprint-staging.vercel.app]
+    VPrev --> DevDB
+    VPrev --> DevBlob[(📦 Vercel Blob<br/>dev store)]
+
+    Main --> H2{👤 Human checks the<br/>sandbox, then promotes}
+    H2 --> PR2[🔀 Pull request: main → production]
+    PR2 --> Prod[[🌿 production]]
+    Prod --> WProd[⚙️ deploy-production.yml]
+    WProd --> B2[🏗️ npm run build<br/>payload migrate → next build]
+    B2 --> ProdDB[(🗄️ Supabase<br/>production project)]
+    B2 --> VProd[▲ Vercel Production<br/>overprint-shop.vercel.app]
+    VProd --> ProdDB
+    VProd --> ProdBlob[(📦 Vercel Blob<br/>production store)]
+
+    Sec[🔑 GitHub Actions secrets<br/>VERCEL_TOKEN · ORG_ID · PROJECT_ID] -.-> WPrev
+    Sec -.-> WProd
+    Off[🚫 vercel.json sets git.deploymentEnabled false<br/>so these workflows are the only thing that ships] -.-> VPrev
+    Off -.-> VProd
+
+    classDef human fill:#FFD700,stroke:#333,stroke-width:2px,color:black
+    classDef ci fill:#87CEEB,stroke:#333,stroke-width:2px,color:darkblue
+    classDef host fill:#90EE90,stroke:#333,stroke-width:2px,color:darkgreen
+    classDef store fill:#E6E6FA,stroke:#333,stroke-width:2px,color:darkblue
+    classDef note fill:#FFE4B5,stroke:#8B4513,stroke-width:1px,color:black
+
+    class Dev,H1,H2 human
+    class PR,PR2,CI,WPrev,WProd,B1,B2,Main,Prod ci
+    class VPrev,VProd host
+    class DevDB,ProdDB,DevBlob,ProdBlob store
+    class Sec,Off note
+```
+
+The two deploy paths are the same workflow shape pointed at different environments, and
+each build runs `payload migrate` against whichever `DATABASE_URI` `vercel pull` fetched
+for it — so a migration always runs against the database it belongs to, and no database
+credential ever has to live in a GitHub secret.
+
+### Who talks to what at runtime
+
+```mermaid
+flowchart LR
+    Owner([👤 Shop owner]) -->|logs in| Admin[🔐 /admin<br/>Payload admin panel]
+    Admin -->|edits catalogue,<br/>marks orders shipped| DB[(🗄️ Supabase Postgres<br/>session pooler)]
+    Admin -->|uploads images| Blob[(📦 Vercel Blob)]
+
+    Cust([👤 Customer]) --> Shop[🌐 Storefront<br/>Next.js on Vercel]
+    Shop --> DB
+    Shop --> Blob
+
+    Cust -->|picks a size,<br/>accepts the terms| CO[⚡ POST /shop/checkout]
+    CO -->|price read from the database<br/>inside the same request| DB
+    CO -->|creates a session,<br/>writes the order as pending| Stripe[💳 Stripe Checkout<br/>sandbox]
+    Cust -->|pays on Stripe's page| Stripe
+    Stripe -->|signed event| Hook[🔒 POST /shop/stripe-webhook]
+    Hook -->|signature verified first,<br/>only then marked paid| DB
+    Cust -->|redirected to| Succ[✅ /order/success<br/>reads and displays<br/>decides nothing]
+    Succ --> DB
+
+    Ops([👤 Operator]) -->|export · erase · prune,<br/>by hand| Scripts[🛠️ order-admin scripts]
+    Scripts --> DB
+
+    classDef person fill:#FFD700,stroke:#333,stroke-width:2px,color:black
+    classDef app fill:#90EE90,stroke:#333,stroke-width:2px,color:darkgreen
+    classDef store fill:#E6E6FA,stroke:#333,stroke-width:2px,color:darkblue
+    classDef money fill:#FFB6C1,stroke:#DC143C,stroke-width:2px,color:black
+
+    class Owner,Cust,Ops person
+    class Shop,Admin,CO,Succ,Scripts app
+    class DB,Blob store
+    class Stripe,Hook money
+```
+
+The two arrows worth following are the ones into Postgres. The price that reaches Stripe is
+read from the database inside the same request that creates the session, so the browser
+never supplies it. And the only arrow that writes `status: paid` comes from the webhook,
+after its signature has been checked — not from the customer returning to the success page.
+
+## How the owner edits the shop
+
+Everything a non-technical owner needs is in the Payload admin panel at
+[`/admin`](https://overprint-shop.vercel.app/admin). No deploy, no pull request, no code.
+
+**Sign in** with the admin account for that environment. Production and the sandbox have
+separate accounts and separate databases, so editing one never touches the other.
+
+**Products** — the catalogue. Each shirt carries a name, a URL slug, a price, a
+description, an image and a sold-out checkbox:
+
+| Field | Notes for the owner |
+|---|---|
+| Name | Shown on the catalogue and the product page |
+| Slug | The URL segment, e.g. `midnight-tee` → `/products/midnight-tee` |
+| Price | **In cents.** `2500` means EUR 25.00. Whole numbers only |
+| Description | A short paragraph on the product page |
+| Image | Uploaded straight from the browser to Vercel Blob |
+| Sold out | Ticking it hides the buy button *and* refuses checkout server-side |
+
+**Changes are live immediately.** The catalogue and product pages are rendered per request
+(`export const dynamic = 'force-dynamic'`), so they read the database on every visit. Edit a
+price, save, reload the shop — the new price is there, with no build and no deploy. That is
+the whole point of putting the catalogue in a CMS.
+
+**Media** — uploaded images. Each carries alt text and a **Generated By** setting
+(*AI-generated* / *Photograph* / *Unknown*). Images marked AI-generated show a visible
+"AI-generated image" caption on the public site; see [The legal page](#the-legal-page).
+
+**Orders** — read-only, with one exception. The owner can set **Fulfilment status** to
+*Shipped*, and nothing else: the money and payment fields are locked at field level, so an
+order can only become *paid* through Stripe's verified webhook. See
+[Fulfilment](#fulfilment).
+
 ## Local setup
 
 1. **Node 22 via Volta.** The repo pins `22.23.2` in `package.json`'s `volta` key
@@ -303,6 +431,38 @@ scopes; the GitHub Actions ones live only in the repository's encrypted Actions
 secrets. Local development uses its own `.env`, pointed at the dev Supabase
 project and a local `stripe listen` webhook secret — never a shared file.
 
+## Optional tasks completed
+
+The brief asks for at least one, through a dedicated feature branch and pull request. Six
+were done, each on its own branch with its own PR.
+
+| Task | Tier | Where to see it |
+|---|---|---|
+| **Order confirmation page** | Easy | [`/order/success`](https://overprint-shop.vercel.app/order/success) — lists what was bought and confirms the order is paid. It reads the order back and displays it; it has no authority to mark anything paid |
+| **Sold-out state from the admin panel** | Easy | Tick *Sold out* on a product. The buy button disappears **and** `POST /shop/checkout` refuses it with a 409, so it is enforced server-side rather than only hidden |
+| **An Orders collection in Payload** | Medium | `src/collections/Orders.ts`. A row is written as `pending` when checkout starts and only the verified webhook flips it to `paid` |
+| **Instant-rollback rehearsal** | Medium | [`docs/rollback-rehearsal.md`](docs/rollback-rehearsal.md) — the shop name was broken on purpose, promoted to production, recovered with Vercel's instant rollback, then properly reverted. Two findings came out of it that are worth more than the exercise: **CI passed on the broken change**, and **the rollback fixed the deployment while leaving the repository broken** |
+| **A written go-live plan** | Hard | [`docs/go-live-plan.md`](docs/go-live-plan.md) — what switching to real payments would require. A plan, not a log: nothing in it has been executed and the shop stays in the sandbox |
+| **A documented migration flow** | Hard | [Schema changes](#schema-changes) here and the *"migrate, never push"* section of [`CLAUDE.md`](./CLAUDE.md). Every schema change is a committed migration, applied to development first and carried to production by the same pull-request pipeline as the code |
+
+Not attempted: a custom domain, a scheduled health check, and a second owner-editable
+collection such as an About or FAQ page.
+
+## What this is not
+
+The shop demonstrates the two halves the brief asks for — an owner-editable catalogue and a
+payment confirmed by a verified webhook. It is not a business. Print-on-demand is its
+premise, not an integration: **no fulfilment provider is contacted, nothing is printed, and
+nothing ships.**
+
+[`docs/what-a-real-shop-would-need.md`](docs/what-a-real-shop-would-need.md) is the gap
+list — what sits between this and a shop that could take an order and post a shirt. It
+covers the missing provider integration, why a display image is not a print file, how the
+money actually flows between Stripe, you and the printer, the customer emails that do not
+exist, and the legal position that changes the moment anything is sold for real. It also
+names the one thing that would block a real shop on day one: the catalogue is built on band
+names.
+
 ## Known limitations
 
 Recorded here rather than left for a reviewer to find on their own:
@@ -351,6 +511,10 @@ Recorded here rather than left for a reviewer to find on their own:
   webhook delivery log showing a 200, the rollback before and after, the pull-request
   history, and the live endpoint checks. It also lists, honestly, what was *not*
   captured.
+- [`docs/what-a-real-shop-would-need.md`](docs/what-a-real-shop-would-need.md) — the gap
+  between this demonstration and an operating print-on-demand business: fulfilment, print
+  files, how the money moves, customer email, and what changes legally once anything is
+  really sold.
 - [`docs/go-live-plan.md`](docs/go-live-plan.md) — what switching this shop from
   Stripe sandbox to real, live payments would require. Nothing in it has been
   executed; it's a plan, not a log.
