@@ -20,7 +20,7 @@ export function SiteHeader() {
           </Link>
           {/* Outside the link, so the link's accessible name stays "OverPrint"
               rather than swallowing the tagline with it. */}
-          <p className="text-xs tracking-wide text-neutral-600">Get my band&rsquo;s tees</p>
+          <p className="text-center text-xs tracking-wide text-neutral-600">Get my band&rsquo;s tees</p>
         </div>
 
         <SiteNav />
