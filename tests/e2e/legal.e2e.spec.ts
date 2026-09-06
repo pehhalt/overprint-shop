@@ -10,7 +10,7 @@ test('every storefront page links to the legal page', async ({ page }) => {
 test('the legal page names the contact and the AI disclosure', async ({ page }) => {
   await page.goto('/legal')
   await expect(page.getByText('overprintdemoshop@gmail.com')).toBeVisible()
-  await expect(page.getByText(/AI/i).first()).toBeVisible()
+  await expect(page.getByText(/AI-generated/i).first()).toBeVisible()
 })
 
 test('the admin panel has no storefront footer', async ({ page }) => {
