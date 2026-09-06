@@ -2,6 +2,40 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> ## ✅ Executed and complete — with one task substantially replaced
+>
+> This plan was carried out in a single session and everything it describes is live at
+> [overprint-shop.vercel.app](https://overprint-shop.vercel.app). All twelve tasks were
+> implemented, each reviewed before the next began, and the work reached production through
+> pull requests #20 and #21.
+>
+> **The step checkboxes below are deliberately left unticked**, because ticking them would
+> claim the plan was followed step by step, and in four places it was not:
+>
+> - **Task 4 was substantially replaced.** `consent_collection: { terms_of_service: 'required' }`
+>   was verified against the live Stripe sandbox and fails permanently — it needs a dashboard
+>   Terms-of-Service URL obtainable only by activating the Stripe account, which `CLAUDE.md`
+>   forbids and the owner declined. Consent is collected on the shop's own page instead: a
+>   required checkbox linking to `/legal`, re-checked server-side, timestamped as
+>   `orders.termsAcceptedAt`.
+> - **Task 2's `required: true` on `sizeSnapshot` was wrong**, and only a whole-branch review
+>   caught it. Payload validates the merged document on update, so every order created before
+>   the field existed became unupdatable — the owner could not have marked any of them
+>   shipped. Fixed to `required: false`, with a test that fails against the old config.
+> - **Several task briefs were incomplete.** File lists omitted affected test fixtures, test
+>   counts were miscounted, and Task 10's example test reused one fixture across two cases in
+>   a way that could not have passed. Each was caught during execution.
+> - **One instruction was based on something that did not exist.** Task 12 asked for a README
+>   limitation about `orders.email` being "stored but unread" to be revised; that sentence had
+>   never been in the README.
+>
+> The `subagent-driven-development` workflow this plan calls for tracks progress in a separate
+> ledger rather than by ticking the plan, so unticked boxes are its expected end state.
+>
+> A later round of audits — GDPR, EU AI Act, quality and security — found more, and those are
+> recorded in the pull requests that followed rather than here.
+
+
 **Goal:** Turn a shop that takes money into one that could plausibly deliver — sizes, a shipping address, a fulfilment workflow — and make it lawful to run, with a legal page, an AI-content disclosure, and working data-subject rights.
 
 **Architecture:** Stripe Checkout collects the address and consent by configuration rather than code; the webhook stores what it returns. `Orders` opens collection-level `update` to admins while closing every money and status field individually, so the owner can operate the shop without anyone being able to hand-edit an order to `paid`. A `generatedBy` field on `media` lets the system represent, and therefore disclose, that its product images are AI-generated.
