@@ -11,31 +11,23 @@
  */
 import 'dotenv/config'
 import { assertSafeTarget, findOrders, redactOrder } from '@/lib/order-admin'
-import {
-  assertKnownFlags,
-  describeTarget,
-  exitAfterWrite,
-  hasConfirm,
-  initPayloadForScript,
-  parseTarget,
-  refuse,
-} from './lib/order-admin-cli'
+import { describeTarget, exitAfterWrite, hasConfirm, parseArgs, parseTarget, refuse } from './lib/order-admin-cli'
 
 async function main() {
   const argv = process.argv.slice(2)
-  assertKnownFlags(argv, ['--email', '--session', '--confirm'])
-  const target = parseTarget(argv)
+  const parsed = parseArgs(argv, [
+    { name: '--email', takesValue: true },
+    { name: '--session', takesValue: true },
+    { name: '--confirm', takesValue: false },
+  ])
+  const target = parseTarget(parsed)
+  const confirmed = hasConfirm(parsed)
 
   try {
     assertSafeTarget()
   } catch (error) {
     refuse(error)
   }
-
-  // Must run before findOrders()'s own getPayload({ config }) call — see
-  // initPayloadForScript()'s doc comment for why that ordering is what redirects
-  // Payload's logger away from stdout.
-  await initPayloadForScript()
 
   const orders = await findOrders(target)
 
@@ -49,7 +41,7 @@ async function main() {
     console.log(`  #${order.id} session=${order.stripeCheckoutSessionId} email=${order.email ?? '(already redacted)'}`)
   }
 
-  if (!hasConfirm(argv)) {
+  if (!confirmed) {
     await exitAfterWrite(process.stdout, 'Dry run: nothing was written. Pass --confirm to redact the order(s) above.\n', 0)
     return
   }
@@ -66,8 +58,10 @@ async function main() {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    // stdout, same as the "Redacted #N." lines above — see exitAfterWrite's doc comment
+    // for why that (not stderr) is what guarantees the itemised list already landed.
     await exitAfterWrite(
-      process.stderr,
+      process.stdout,
       `Failed partway through erasure — ${redactedCount}/${orders.length} order(s) already redacted before this error: ${message}\n`,
       1,
     )

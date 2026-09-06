@@ -21,8 +21,10 @@
  *   npm run prune:orders -- --confirm     (deletes/redacts)
  */
 import 'dotenv/config'
+import { getPayload } from 'payload'
+import config from '@payload-config'
 import { assertSafeTarget, redactOrder } from '@/lib/order-admin'
-import { assertKnownFlags, exitAfterWrite, hasConfirm, initPayloadForScript, refuse } from './lib/order-admin-cli'
+import { exitAfterWrite, hasConfirm, parseArgs, refuse } from './lib/order-admin-cli'
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
 const TWO_YEARS_MS = 2 * 365 * 24 * 60 * 60 * 1000
@@ -30,11 +32,18 @@ const TWO_YEARS_MS = 2 * 365 * 24 * 60 * 60 * 1000
 async function main() {
   const argv = process.argv.slice(2)
   // No --email/--session: unlike its siblings, prune-orders.ts isn't scoped to one
-  // subject — it acts on every stale order in the database. Fix round 2 found that
+  // subject — it acts on every stale order in the database. Fix round 1 found that
   // passing one of the sibling scripts' flags here (a natural mistake, since all three
   // share a package.json section) was silently ignored rather than refused, so an
   // operator who assumed prune scoped the way erase does could prune the whole database.
-  assertKnownFlags(argv, ['--confirm'])
+  // Fix round 2 found that parseArgs's own allow-list only closed `--`-prefixed
+  // arguments — a bare positional argument (`prune:orders -- someone@example.com
+  // --confirm`) was still silently discarded while --confirm still landed and pruned
+  // everything. parseArgs (shared/lib) now rejects any argument, of either shape, that
+  // isn't declared here — and nothing is declared to take a value, so any value at all
+  // is rejected the same way.
+  const parsed = parseArgs(argv, [{ name: '--confirm', takesValue: false }])
+  const confirm = hasConfirm(parsed)
 
   try {
     assertSafeTarget()
@@ -42,9 +51,8 @@ async function main() {
     refuse(error)
   }
 
-  const confirm = hasConfirm(argv)
   const now = Date.now()
-  const payload = await initPayloadForScript()
+  const payload = await getPayload({ config })
 
   const { docs: staleUnpaid } = await payload.find({
     collection: 'orders',
@@ -100,8 +108,11 @@ async function main() {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    // stdout, same as the "Deleted #N."/"Redacted #N." lines above — see
+    // exitAfterWrite's doc comment for why that (not stderr) is what guarantees the
+    // itemised list already landed.
     await exitAfterWrite(
-      process.stderr,
+      process.stdout,
       `Failed partway through pruning — ${deletedCount}/${staleUnpaid.length} deletion(s) and ` +
         `${redactedCount}/${stalePaid.length} redaction(s) already committed before this error: ${message}\n`,
       1,

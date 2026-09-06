@@ -20,9 +20,9 @@
     "generate:importmap": "payload generate:importmap",
     "payload": "payload",
     "seed": "tsx scripts/seed.ts",
-    "export:order": "tsx scripts/export-order.ts",
-    "erase:order": "tsx scripts/erase-order.ts",
-    "prune:orders": "tsx scripts/prune-orders.ts"
+    "export:order": "cross-env PAYLOAD_LOG_TO_STDERR=1 tsx scripts/export-order.ts",
+    "erase:order": "cross-env PAYLOAD_LOG_TO_STDERR=1 tsx scripts/erase-order.ts",
+    "prune:orders": "cross-env PAYLOAD_LOG_TO_STDERR=1 tsx scripts/prune-orders.ts"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.88.0",

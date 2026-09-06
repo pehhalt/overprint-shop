@@ -23,6 +23,19 @@ export default buildConfig({
   },
   collections: [Users, Media, Products, Orders],
   editor: lexicalEditor(),
+  // Payload's default pino logger writes straight to stdout, including its own
+  // startup/runtime lines (e.g. "No email adapter provided") — invisible for the Next
+  // server, but fatal for scripts/export-order.ts, whose stdout is meant to be pure
+  // JSON (task-11-report.md's fix round 1: a log line landing before the `[` corrupted
+  // a piped/redirected export into invalid JSON, undetected by any proof that reads a
+  // terminal mixing stdout and stderr together). PAYLOAD_LOG_TO_STDERR=1 — set by the
+  // export/erase/prune npm scripts via cross-env, nowhere else — redirects the
+  // destination for exactly those processes. This is on the config itself, not on
+  // which code happens to call getPayload() first, so it holds regardless of caching
+  // behaviour or call order; see src/lib/order-admin.ts's two getPayload() calls for
+  // where that used to matter.
+  logger:
+    process.env.PAYLOAD_LOG_TO_STDERR === '1' ? { destination: process.stderr, options: {} } : undefined,
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),

@@ -105,6 +105,12 @@ export async function findOrders({
   if (email) conditions.push({ email: { equals: email } })
   if (sessionId) conditions.push({ stripeCheckoutSessionId: { equals: sessionId } })
 
+  // No `key` here, deliberately: whether Payload's logger writes to stdout or stderr is
+  // controlled by src/payload.config.ts's own PAYLOAD_LOG_TO_STDERR-gated `logger` field
+  // on `config` itself, not by call order or by which cache slot this ends up in. Adding
+  // a `key` (a separate cached instance, still built from this same `config`) would not
+  // break that — but a `config` swapped out for one without the gated `logger` field
+  // would, silently, for scripts/export-order.ts.
   const payload = await getPayload({ config })
   const { docs } = await payload.find({
     collection: 'orders',
@@ -140,6 +146,8 @@ export async function findOrders({
 export async function redactOrder(id: number): Promise<Order> {
   assertSafeTarget()
 
+  // See the equivalent comment in findOrders() above — the same `config`, so the same
+  // PAYLOAD_LOG_TO_STDERR gating, applies here regardless of call order or `key`.
   const payload = await getPayload({ config })
 
   return payload.update({
