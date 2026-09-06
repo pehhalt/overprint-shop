@@ -244,7 +244,7 @@ export interface Order {
     /**
      * The size chosen at purchase. What the owner prints.
      */
-    sizeSnapshot: string;
+    sizeSnapshot?: string | null;
     quantity: number;
     id?: string | null;
   }[];

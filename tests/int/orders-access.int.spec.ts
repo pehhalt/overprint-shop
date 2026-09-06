@@ -31,7 +31,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getPayload, type Payload } from 'payload'
 import config from '@payload-config'
+import { sql } from '@payloadcms/db-postgres'
 import { PATCH as ordersApiPatch, POST as ordersApiPost } from '@/app/(payload)/api/[...slug]/route'
+import { redactOrder } from '@/lib/order-admin'
 
 const FIXTURE_SESSION_ID_REST_ANON = 'task9-fixture-cs_test_rest_anon'
 const FIXTURE_SESSION_ID_REST_AUTH = 'task9-fixture-cs_test_rest_auth'
@@ -278,5 +280,76 @@ describe('Orders access control (Task 9)', () => {
       overrideAccess: true,
     })
     expect(order.status).toBe('paid')
+  })
+})
+
+/**
+ * The whole-branch review's Critical 1. Every task in this branch was reviewed and
+ * passed on its own; this failure only exists in their composition. `sizeSnapshot` was
+ * added as a required field over a column the migration deliberately left nullable and
+ * un-backfilled, so production's pre-branch order rows carry a null size. Payload
+ * validates the *merged* document on update, not just the incoming fields — an absent
+ * `items` is refilled from `originalDoc`, null size and all, and then fails the required
+ * check. The result: the owner cannot mark any pre-branch order shipped, `erase:order`
+ * throws on exactly the rows erasure exists for, and a late Stripe webhook 500s.
+ *
+ * Nothing in the suite could catch that, because nothing in dev has such a row:
+ * `scripts/seed.ts` creates no orders and every other fixture here sets a size. So this
+ * test manufactures one, with the single SQL statement that reaches past Payload's own
+ * validation to produce the shape production actually holds.
+ */
+describe('Orders written before sizeSnapshot existed', () => {
+  const FIXTURE_SESSION_ID_PRE_SIZE = 'review-fixture-cs_test_pre_size'
+  const FIXTURE_EMAIL_PRE_SIZE = 'review-fixture-pre-size@overprint.local'
+  let payload: Payload
+  let preSizeOrderId: number
+
+  beforeAll(async () => {
+    payload = await getPayload({ config })
+
+    const created = await payload.create({
+      collection: 'orders',
+      data: { ...fixtureOrderPayload(FIXTURE_SESSION_ID_PRE_SIZE), email: FIXTURE_EMAIL_PRE_SIZE },
+      overrideAccess: true,
+    })
+    preSizeOrderId = created.id
+
+    // Raw SQL, not payload.update: the Local API cannot write this row, which is the
+    // whole point — only a database that predates the column can hold it.
+    await payload.db.drizzle.execute(
+      sql`UPDATE "orders_items" SET "size_snapshot" = NULL WHERE "_parent_id" = ${preSizeOrderId}`,
+    )
+  })
+
+  afterAll(async () => {
+    await payload.delete({ collection: 'orders', id: preSizeOrderId, overrideAccess: true }).catch(() => {})
+  })
+
+  it('can still be marked shipped', async () => {
+    const fetched = await payload.findByID({ collection: 'orders', id: preSizeOrderId, overrideAccess: true })
+    expect(fetched.items[0].sizeSnapshot).toBeFalsy()
+
+    const updated = await payload.update({
+      collection: 'orders',
+      id: preSizeOrderId,
+      overrideAccess: true,
+      data: { fulfilmentStatus: 'shipped' },
+    })
+
+    expect(updated.fulfilmentStatus).toBe('shipped')
+    expect(updated.fulfilledAt).toBeTruthy()
+    // The missing size stays missing: this fixes the write path, it does not invent a
+    // size the customer never chose.
+    expect(updated.items[0].sizeSnapshot).toBeFalsy()
+  })
+
+  it('can still be redacted for a GDPR erasure request', async () => {
+    const before = await payload.findByID({ collection: 'orders', id: preSizeOrderId, overrideAccess: true })
+    expect(before.email).toBe(FIXTURE_EMAIL_PRE_SIZE)
+
+    await expect(redactOrder(preSizeOrderId)).resolves.toBeTruthy()
+
+    const after = await payload.findByID({ collection: 'orders', id: preSizeOrderId, overrideAccess: true })
+    expect(after.email).toBeFalsy()
   })
 })

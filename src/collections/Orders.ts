@@ -132,9 +132,17 @@ export const Orders: CollectionConfig = {
           admin: { description: 'The unit price actually charged, in cents.' },
         },
         {
+          // Not required, because orders placed before sizes existed have no size and
+          // never will. Payload validates the whole merged document on update, not just
+          // the incoming fields, so a `required` here would refuse every write to those
+          // rows — marking one shipped, redacting one for a GDPR erasure request, or a
+          // late Stripe webhook landing on one. The guarantee that new orders always
+          // carry a valid size lives where the size is chosen: `isValidSize` in
+          // src/app/(frontend)/shop/checkout/route.ts, the only code path that creates
+          // an order.
           name: 'sizeSnapshot',
           type: 'text',
-          required: true,
+          required: false,
           admin: { description: 'The size chosen at purchase. What the owner prints.' },
         },
         { name: 'quantity', type: 'number', required: true, defaultValue: 1 },
