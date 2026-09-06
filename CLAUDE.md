@@ -17,6 +17,11 @@ Print-on-demand is the shop's premise, not an integration — no fulfilment prov
 - **`DATABASE_URI` is Supabase's session-mode pooler** (port 5432, host contains `pooler.supabase.com`). Transaction mode (6543) drops prepared statements, which Payload's Drizzle adapter needs.
 - **Node 22.** Pinned in `.nvmrc`, `engines`, and Volta.
 - **Products access rule:** anyone may read; only a logged-in admin may create, edit or delete.
+- **Never add image resizing.** `imageSizes`, `resizeOptions`, or `next/image` strip the C2PA
+  provenance manifests that are the machine-readable evidence these images are AI-generated.
+- **Orders: only `fulfilmentStatus` is admin-writable.** Every other field is
+  `update: () => false` at field level. If you need to change one, ask why — the answer is
+  usually that the webhook should be doing it.
 
 ## Schema changes: migrate, never push
 
@@ -30,6 +35,8 @@ volta run --node 22 -- npx payload migrate
 **Why push is off:** Payload's dev-only push mode writes a `batch: -1` row into `payload_migrations`. When a real migration later runs against that database, `payload migrate` sees that row and prompts "data loss will occur. Would you like to proceed?" — a prompt with no TTY in CI, so the deploy hangs indefinitely rather than failing or succeeding. Keeping push off in every environment, including local dev, means that row is never written and every environment's schema history stays identical.
 
 **If you forget:** the failure is silent. TypeScript compiles, the app starts, and the admin panel simply does not show the new field — no error, no warning. If a collection field you just added isn't showing up in the admin UI, the fix is almost always to create and run the missing migration, not to debug the collection config.
+
+**Renaming a field is its own trap.** `payload migrate:create` prompts interactively when it detects a possible rename, and its highlighted default is "create column" — i.e. drop the old column and add a new one, discarding every row's value in that column. Accepting the default, or running the command somewhere nothing can answer the prompt (CI, a script), silently produces a migration that deletes data on the next deploy. Always choose "rename column" instead, and always open the generated SQL and read it before running `payload migrate`. This was discovered during Task 8 and is the single most dangerous footgun found in this work.
 
 ## Production rules
 

@@ -119,6 +119,83 @@ use any future expiry date and any three-digit CVC with:
 Both handlers live outside `/api` (`/shop/checkout`, `/shop/stripe-webhook`)
 because Payload mounts its own REST API at `/api/[...slug]`.
 
+## Sizes, shipping, and consent
+
+- **Size.** `SIZES` (`src/lib/constants.ts`) is `['S', 'M', 'L', 'XL']`, a
+  catalogue-wide constant — every shirt comes in all four sizes, so this is
+  deliberately not a per-product field, the same way `CURRENCY` isn't.
+  Default `M`. The server checks the submitted size against this list with an
+  exact string match (no trimming, no case-folding) and rejects anything else
+  with a `400`. The size actually bought is snapshotted onto the order line
+  as `sizeSnapshot`.
+- **Shipping address.** Collected by Stripe itself
+  (`shipping_address_collection`, Germany only) and read back from
+  `session.collected_information.shipping_details` in the webhook handler.
+  This is a trap: Stripe moved shipping details there from a top-level field
+  in its Basil API version, and this project is pinned to a later version —
+  the old top-level path silently resolves to `undefined` rather than
+  erroring, so following older documentation here would compile, run, and
+  collect nothing.
+- **Terms consent.** Collected on **our own site**, not by Stripe: a required
+  checkbox on the product page linking to [`/legal`](#the-legal-page), sent
+  with the checkout request and re-checked server-side with a strict
+  `=== true` identity test (a truthy value like the string `"true"` doesn't
+  count). Accepted consent is timestamped as `orders.termsAcceptedAt`. This
+  runs on our own page rather than through Stripe's `consent_collection`
+  because that feature requires a Terms-of-Service URL set in the Stripe
+  dashboard, which cannot be set without activating the account — forbidden
+  by `CLAUDE.md`.
+
+## Fulfilment
+
+An admin marks an order shipped from its edit page in `/admin`. `Orders`'
+collection-level `update` is open to any logged-in admin, but only
+`fulfilmentStatus` is actually writable — the other eleven fields
+(`stripeCheckoutSessionId`, `stripePaymentIntentId`, `email`, `shippingName`,
+`shippingAddress`, `status`, `amountTotal`, `paidAt`, `termsAcceptedAt`,
+`fulfilledAt`, `items`) each carry field-level `access: { update: () =>
+false }`, so a browser can change the fulfilment status and nothing else.
+`fulfilledAt` is set by a `beforeChange` hook when `fulfilmentStatus` flips to
+`shipped`, and cleared if it flips back — never set by hand.
+
+## The legal page
+
+`/legal` covers what the shop is, who runs it, the AI-image disclosure, and a
+privacy notice (what's collected, retention, and how to exercise access or
+erasure rights). It's linked from a footer on every storefront page
+(`SiteFooter.tsx`) and nowhere in `/admin` — the two audiences don't share
+chrome.
+
+## Order data: export, erasure, and retention
+
+Three scripts under `scripts/`, supported only via their npm script — never a
+direct `tsx` invocation (see `PAYLOAD_LOG_TO_STDERR` below):
+
+| Script | Does |
+|---|---|
+| `npm run export:order -- --email <e>` or `-- --session <id>` | Writes every matching order to stdout as JSON. |
+| `npm run erase:order -- --email <e> [--confirm]` (or `--session <id>`) | Redacts every matching order's identity fields. |
+| `npm run prune:orders [-- --confirm]` | Applies retention: deletes stale unpaid orders, redacts stale paid ones. |
+
+`--email` / `--session` pick the target order(s) for `export:order` and
+`erase:order`. `erase:order` and `prune:orders` write nothing without an
+explicit `--confirm` — without it, each prints its plan (which orders, what
+it would do) and exits. All three refuse to run with `NODE_ENV=production`,
+or when `DATABASE_URI` can't be confirmed as the development project — a
+project-ref guard shaped like `scripts/seed.ts`'s, but checking `NODE_ENV`
+first, unconditionally, so no override can rescue a production target.
+
+**Retention:** unpaid/expired orders are deleted after 30 days; paid orders
+are kept 2 years, then redacted (identity fields cleared, amount and date
+kept as a commercial record). Both are measured from `createdAt`. This is
+enforced manually — `prune:orders` only prunes when an operator runs it;
+nothing happens on a schedule.
+
+**`PAYLOAD_LOG_TO_STDERR`**, set only by these three npm scripts
+(`src/payload.config.ts`), redirects Payload's own logger to stderr so it
+can't interleave with — and corrupt — the JSON `export:order` writes to
+stdout. Running a script directly with `tsx` instead of `npm run` skips this.
+
 ## Deployment pipeline
 
 ```

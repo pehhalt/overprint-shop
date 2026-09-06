@@ -53,8 +53,8 @@ export default function LegalPage() {
         retention targets: unpaid orders are removed after 30 days, and paid orders are kept for 2
         years, after which they are redacted — their identity details (email, name, address)
         cleared, leaving only the amount and date as a commercial record. Enforcement is manual and
-        operator-initiated, not automated — and since the maintenance script that applies these
-        limits is still being built, nothing is purged or redacted on a schedule today.
+        operator-initiated: an operator runs a maintenance script by hand to apply these limits.
+        Nothing is purged or redacted automatically, and no recurring schedule does this for them.
       </p>
       <p className="mt-2 text-neutral-700">
         To exercise your rights of access, rectification, erasure, or portability, email the
