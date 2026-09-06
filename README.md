@@ -38,8 +38,10 @@ sold.
 3. **Copy `.env.example` to `.env`** and fill it in:
    - `DATABASE_URI` — the dev project's session-pooler string, as above.
    - `SEED_DEV_PROJECT_REF` — the dev project's ref (the `postgres.XXXX` part of
-     the username in `DATABASE_URI`). `scripts/seed.ts` checks this before it
-     will write anything, so it can positively confirm it's aimed at development.
+     the username in `DATABASE_URI`). Four scripts check this before they will
+     touch anything, so each can positively confirm it's aimed at development:
+     `scripts/seed.ts` and the three [order-data scripts](#order-data-export-erasure-and-retention),
+     which read, redact and delete customer orders.
    - `PAYLOAD_SECRET` — any long random string (`openssl rand -hex 32`).
    - `BLOB_READ_WRITE_TOKEN` — a Vercel Blob read/write token for the dev store.
    - `STRIPE_SECRET_KEY` / `STRIPE_PUBLISHABLE_KEY` — Stripe **test-mode** keys
@@ -189,8 +191,9 @@ is the owner's assertion, not something code should assume.
 
 ## Order data: export, erasure, and retention
 
-Three scripts under `scripts/`, supported only via their npm script — never a
-direct `tsx` invocation (see `PAYLOAD_LOG_TO_STDERR` below):
+Three scripts under `scripts/`. Run `export:order` through its npm script and
+not a bare `tsx` invocation — it's the one with a stdout contract to protect
+(see `PAYLOAD_LOG_TO_STDERR` below); the other two only log for a human to read:
 
 | Script | Does |
 |---|---|
@@ -204,7 +207,9 @@ explicit `--confirm` — without it, each prints its plan (which orders, what
 it would do) and exits. All three refuse to run with `NODE_ENV=production`,
 or when `DATABASE_URI` can't be confirmed as the development project — a
 project-ref guard shaped like `scripts/seed.ts`'s, but checking `NODE_ENV`
-first, unconditionally, so no override can rescue a production target.
+first, unconditionally, so no override can rescue a production target. The
+project-ref half is the half that does the work, and
+[`ORDER_ADMIN_ALLOW_UNSAFE=1`](#known-limitations) switches it off.
 
 **Retention:** unpaid/expired orders are deleted after 30 days; paid orders
 are kept 2 years, then redacted (identity fields cleared, amount and date
@@ -215,7 +220,8 @@ nothing happens on a schedule.
 **`PAYLOAD_LOG_TO_STDERR`**, set only by these three npm scripts
 (`src/payload.config.ts`), redirects Payload's own logger to stderr so it
 can't interleave with — and corrupt — the JSON `export:order` writes to
-stdout. Running a script directly with `tsx` instead of `npm run` skips this.
+stdout. Running `export:order` directly with `tsx` skips this and produces
+JSON with a log line in the middle of it.
 
 ## Deployment pipeline
 
@@ -255,7 +261,8 @@ environment.
 | Variable | Preview | Production |
 |---|---|---|
 | `DATABASE_URI` | Dev Supabase project, session pooler | **Separate** prod Supabase project, session pooler |
-| `SEED_DEV_PROJECT_REF` | Dev project's ref, so `npm run seed` can confirm it's pointed at dev | Not set — seeding is a local/dev-only tool, never run against Production |
+| `SEED_DEV_PROJECT_REF` | Dev project's ref, so `seed`, `export:order`, `erase:order` and `prune:orders` can each confirm they're pointed at dev | Not set — all four are local/dev-only tools, never run against Production |
+| `ORDER_ADMIN_ALLOW_UNSAFE` | Not set. Setting it to `1` switches off that project-ref check for the three order scripts — a human override, see [Known limitations](#known-limitations) | Not set, and must never be |
 | `PAYLOAD_SECRET` | Its own value | A different value from Preview |
 | `BLOB_READ_WRITE_TOKEN` | Token for the dev Blob store | Token for a **separate** prod Blob store |
 | `STRIPE_SECRET_KEY` | `sk_test_…` (sandbox) | `sk_test_…` (sandbox) — see the [go-live plan](docs/go-live-plan.md) for the switch to live |
@@ -290,6 +297,17 @@ Recorded here rather than left for a reviewer to find on their own:
   or an `.env` file would bypass the production guard as well as the
   project-ref guard — the override is meant for a human to reach for
   deliberately, not to be a value that can be left lying around safely.
+- **`ORDER_ADMIN_ALLOW_UNSAFE=1` leaves the order scripts with one real guard.**
+  It switches off the project-ref check in `src/lib/order-admin.ts` for
+  `export:order`, `erase:order` and `prune:orders` — the scripts that export,
+  redact and delete customer orders. Unlike `SEED_ALLOW_UNSAFE` it is read
+  *after* the `NODE_ENV === 'production'` check, so no value of it can rescue a
+  production target. But that surviving check is close to inert in practice:
+  `tsx` sets no `NODE_ENV`, and neither do these three npm scripts, so in a real
+  invocation `NODE_ENV` is `undefined` and the project-ref comparison is the
+  only guard actually doing work. Switching it off leaves nothing. Like the seed
+  override, it is for a human to reach for deliberately, never a value to leave
+  set in a shell or an `.env` file.
 - **`npm test` can exhaust Supabase's 15-connection session-pool limit** when
   its `tests/int` integration files run against a live database in parallel.
   It passes reliably with `npm test -- --no-file-parallelism`. CI is
