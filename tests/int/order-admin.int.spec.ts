@@ -15,14 +15,19 @@
  * production guard too (recorded in README's Known limitations). Here `NODE_ENV ===
  * 'production'` is checked first, unconditionally, before anything reads
  * `ORDER_ADMIN_ALLOW_UNSAFE` — proven below by setting the override and still expecting
- * a refusal.
+ * a refusal. `findOrders` and `redactOrder` both call the guard as their first
+ * statement (fix round 1), so this passes against the real dev database on every run
+ * here without either test needing to call it itself.
  *
  * Two fixture orders are used, not one: the redaction test mutates its fixture's email
- * away, so a second, never-redacted fixture backs the lookup test. Both are created in
- * `beforeAll` and removed in `afterAll` — `dev@overprint.local` and the seeded products
- * are never touched.
+ * away, so a second, never-redacted fixture backs the lookup test. Both carry every
+ * field redaction touches — including `shippingAddress.line2` and
+ * `stripePaymentIntentId` — so the redaction test can assert on the ones that are
+ * cleared *and* the ones that must survive, not just the ones the fixture happened to
+ * leave null already. Both fixtures are created in `beforeAll` and removed in
+ * `afterAll` — `dev@overprint.local` and the seeded products are never touched.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { getPayload, type Payload } from 'payload'
 import config from '@payload-config'
 import { assertSafeTarget, findOrders, redactOrder } from '@/lib/order-admin'
@@ -36,10 +41,12 @@ const LOOKUP_EMAIL = 'task10-fixture-lookup@overprint.local'
 function fixtureOrderPayload(stripeCheckoutSessionId: string, email: string) {
   return {
     stripeCheckoutSessionId,
+    stripePaymentIntentId: `pi_${stripeCheckoutSessionId}`,
     email,
     shippingName: 'Task10 Fixture Customer',
     shippingAddress: {
       line1: '1 Fixture Street',
+      line2: 'c/o Fixture Care-Of',
       city: 'Fixture City',
       postalCode: '12345',
       country: 'DE',
@@ -99,6 +106,7 @@ describe('order-admin (Task 10)', () => {
     expect(after.email).toBeFalsy()
     expect(after.shippingName).toBeFalsy()
     expect(after.shippingAddress?.line1).toBeFalsy()
+    expect(after.shippingAddress?.line2).toBeFalsy()
     expect(after.shippingAddress?.city).toBeFalsy()
     expect(after.shippingAddress?.postalCode).toBeFalsy()
     expect(after.shippingAddress?.country).toBeFalsy()
@@ -108,6 +116,7 @@ describe('order-admin (Task 10)', () => {
     expect(after.paidAt).toBe(before.paidAt)
     expect(after.termsAcceptedAt).toBe(before.termsAcceptedAt)
     expect(after.stripeCheckoutSessionId).toBe(before.stripeCheckoutSessionId)
+    expect(after.stripePaymentIntentId).toBe(before.stripePaymentIntentId)
     expect(after.items[0].sizeSnapshot).toBe(before.items[0].sizeSnapshot)
     expect(after.items[0].nameSnapshot).toBe(before.items[0].nameSnapshot)
     expect(after.items[0].unitAmountSnapshot).toBe(before.items[0].unitAmountSnapshot)
@@ -152,9 +161,12 @@ describe('assertSafeTarget', () => {
   const ENV_KEYS = ['NODE_ENV', 'DATABASE_URI', 'SEED_DEV_PROJECT_REF', 'ORDER_ADMIN_ALLOW_UNSAFE'] as const
   let snapshot: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>
 
-  function save() {
+  // Saved before every test (not just the ones that mutate env), so a future test added
+  // without remembering to snapshot still restores correctly instead of inheriting —
+  // and then handing the next test — whatever the previous test left behind.
+  beforeEach(() => {
     snapshot = Object.fromEntries(ENV_KEYS.map((key) => [key, env[key]]))
-  }
+  })
 
   afterEach(() => {
     for (const key of ENV_KEYS) {
@@ -164,37 +176,31 @@ describe('assertSafeTarget', () => {
   })
 
   it('does not throw against the real development target', () => {
-    save()
     expect(() => assertSafeTarget()).not.toThrow()
   })
 
   it('refuses when NODE_ENV is production, even with the override set', () => {
-    save()
     env.NODE_ENV = 'production'
     env.ORDER_ADMIN_ALLOW_UNSAFE = '1'
     expect(() => assertSafeTarget()).toThrow(/production/i)
   })
 
   it('refuses when DATABASE_URI is not set', () => {
-    save()
     delete env.DATABASE_URI
     expect(() => assertSafeTarget()).toThrow(/DATABASE_URI/)
   })
 
   it('refuses when SEED_DEV_PROJECT_REF is not set', () => {
-    save()
     delete env.SEED_DEV_PROJECT_REF
     expect(() => assertSafeTarget()).toThrow(/SEED_DEV_PROJECT_REF/)
   })
 
   it('refuses when the project ref does not match', () => {
-    save()
     env.SEED_DEV_PROJECT_REF = 'some-other-project-ref'
     expect(() => assertSafeTarget()).toThrow(/does not match/)
   })
 
   it('lets the override rescue a project-ref mismatch outside production', () => {
-    save()
     env.SEED_DEV_PROJECT_REF = 'some-other-project-ref'
     env.ORDER_ADMIN_ALLOW_UNSAFE = '1'
     expect(() => assertSafeTarget()).not.toThrow()

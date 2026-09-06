@@ -10,70 +10,20 @@ import config from '@payload-config'
 import type { Order } from '@/payload-types'
 import { extractSupabaseProjectRef } from './supabase-project-ref'
 
-/**
- * Looks up orders by email or Stripe Checkout Session id, for export and erasure
- * requests. `orders` read access is admin-only and these callers run outside any
- * request/session context, so this always calls the Local API with `overrideAccess:
- * true`. `pagination: false` returns every match — a GDPR export can't stop at the
- * first page.
- */
-export async function findOrders({
-  email,
-  sessionId,
-}: {
-  email?: string
-  sessionId?: string
-}): Promise<Order[]> {
-  if (!email && !sessionId) {
-    throw new Error('findOrders requires an email or a sessionId.')
-  }
-
-  const conditions: Where[] = []
-  if (email) conditions.push({ email: { equals: email } })
-  if (sessionId) conditions.push({ stripeCheckoutSessionId: { equals: sessionId } })
-
-  const payload = await getPayload({ config })
-  const { docs } = await payload.find({
-    collection: 'orders',
-    where: conditions.length > 1 ? { and: conditions } : conditions[0],
-    pagination: false,
-    overrideAccess: true,
-  })
-
-  return docs
-}
-
-/**
- * Erasure redacts, it does not delete the row: `amountTotal`, `status`, `paidAt`,
- * `items` (including `sizeSnapshot`) and `termsAcceptedAt` are a commercial and consent
- * record with their own retention basis and are left untouched. Only identity — `email`,
- * `shippingName`, and the whole `shippingAddress` group, cleared as a unit — is wiped.
- * That satisfies Art. 17: the row survives as a sale record, but is no longer personal
- * data. Every field cleared here is `access: { update: () => false }` on the collection,
- * so this must run with `overrideAccess: true` or the write is silently dropped.
- */
-export async function redactOrder(id: number): Promise<Order> {
-  const payload = await getPayload({ config })
-
-  return payload.update({
-    collection: 'orders',
-    id,
-    overrideAccess: true,
-    data: {
-      email: null,
-      shippingName: null,
-      shippingAddress: { line1: null, line2: null, city: null, postalCode: null, country: null },
-    },
-  })
-}
-
 const OVERRIDE_VAR = 'ORDER_ADMIN_ALLOW_UNSAFE'
 
 /**
- * Fails closed before any script here reads, exports, redacts or deletes an order.
+ * Fails closed before this module reads, exports, redacts or deletes an order.
+ * `findOrders` and `redactOrder` both call this as their first statement, so the guard
+ * holds regardless of caller discipline — no script that imports this module can skip it
+ * by omission. Task 11's scripts also call it explicitly at their own startup, before
+ * printing anything; that is not redundant with the internal call, it is what turns a
+ * refusal into a readable message instead of a stack trace surfacing from inside a lookup
+ * or update.
+ *
  * Reuses `scripts/seed.ts`'s guard shape — the same `extractSupabaseProjectRef`,
- * comparing `DATABASE_URI` against `SEED_DEV_PROJECT_REF` — but not its ordering
- * defect: `assertSafeToSeed` checks its override first and returns early, so a stray
+ * comparing `DATABASE_URI` against `SEED_DEV_PROJECT_REF` — but not its ordering defect:
+ * `assertSafeToSeed` checks its override first and returns early, so a stray
  * `SEED_ALLOW_UNSAFE=1` bypasses its production guard too (README's Known limitations).
  *
  * Here `NODE_ENV === 'production'` is checked first, unconditionally: nothing below it,
@@ -120,4 +70,86 @@ export function assertSafeTarget(): void {
         `development project ("${expectedRef}" from SEED_DEV_PROJECT_REF).`,
     )
   }
+}
+
+/**
+ * Looks up orders by email or Stripe Checkout Session id, for export and erasure
+ * requests. `orders` read access is admin-only and these callers run outside any
+ * request/session context, so this always calls the Local API with `overrideAccess:
+ * true`. `pagination: false` returns every match — a GDPR export can't stop at the
+ * first page.
+ *
+ * `assertSafeTarget()` runs first: a data-subject export pulled from the wrong database
+ * is still a disclosure, even though this is a read, not a write.
+ *
+ * `depth: 0` leaves `items[].product` as a raw id rather than populating the full
+ * Product (and its Media). The order's own `items[]` snapshots — `nameSnapshot`,
+ * `unitAmountSnapshot`, `sizeSnapshot` — already carry what the customer ordered; the
+ * default depth would hand an Art. 15/20 export request our catalogue and image
+ * records along with the data subject's own.
+ */
+export async function findOrders({
+  email,
+  sessionId,
+}: {
+  email?: string
+  sessionId?: string
+}): Promise<Order[]> {
+  assertSafeTarget()
+
+  if (!email && !sessionId) {
+    throw new Error('findOrders requires an email or a sessionId.')
+  }
+
+  const conditions: Where[] = []
+  if (email) conditions.push({ email: { equals: email } })
+  if (sessionId) conditions.push({ stripeCheckoutSessionId: { equals: sessionId } })
+
+  const payload = await getPayload({ config })
+  const { docs } = await payload.find({
+    collection: 'orders',
+    where: conditions.length > 1 ? { and: conditions } : conditions[0],
+    depth: 0,
+    pagination: false,
+    overrideAccess: true,
+  })
+
+  return docs
+}
+
+/**
+ * Erasure redacts, it does not delete the row: `amountTotal`, `status`, `paidAt`,
+ * `items` (including `sizeSnapshot`) and `termsAcceptedAt` are a commercial and consent
+ * record with their own retention basis and are left untouched. Only identity — `email`,
+ * `shippingName`, and the whole `shippingAddress` group, cleared as a unit — is wiped.
+ * That satisfies Art. 17: the row survives as a sale record, but is no longer personal
+ * data.
+ *
+ * `assertSafeTarget()` runs first, as this function's first statement — not just at the
+ * call sites in Task 11's scripts — so erasure refuses regardless of whether a caller
+ * remembered to check.
+ *
+ * Every field cleared here is `access: { update: () => false }` on the collection, which
+ * closes it to the HTTP and admin paths, not to server-side tooling. Payload's Local API
+ * already defaults `overrideAccess` to `true` when the option is omitted; the hazard
+ * that field-level access guards against is an explicit `overrideAccess: false` (or a
+ * caller with a real `req.user` and no override), not omission. `overrideAccess: true`
+ * is passed here anyway, as a caller shouldn't have to know that default to trust that
+ * this write actually lands.
+ */
+export async function redactOrder(id: number): Promise<Order> {
+  assertSafeTarget()
+
+  const payload = await getPayload({ config })
+
+  return payload.update({
+    collection: 'orders',
+    id,
+    overrideAccess: true,
+    data: {
+      email: null,
+      shippingName: null,
+      shippingAddress: { line1: null, line2: null, city: null, postalCode: null, country: null },
+    },
+  })
 }
