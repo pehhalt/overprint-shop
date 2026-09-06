@@ -219,9 +219,14 @@ export interface Order {
   amountTotal: number;
   paidAt?: string | null;
   /**
-   * When the customer ticked the terms box on the product page, before being sent to Stripe.
+   * When the server received the checkout request carrying the terms consent.
    */
   termsAcceptedAt?: string | null;
+  fulfilmentStatus: 'unfulfilled' | 'shipped';
+  /**
+   * Set automatically when marked shipped.
+   */
+  fulfilledAt?: string | null;
   items: {
     product?: (number | null) | Product;
     /**
@@ -400,6 +405,8 @@ export interface OrdersSelect<T extends boolean = true> {
   amountTotal?: T;
   paidAt?: T;
   termsAcceptedAt?: T;
+  fulfilmentStatus?: T;
+  fulfilledAt?: T;
   items?:
     | T
     | {

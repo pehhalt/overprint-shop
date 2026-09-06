@@ -123,6 +123,7 @@ function fixtureOrderData(sessionId: string) {
     // `status` has a `defaultValue` on the collection but the generated
     // create-data type still requires it explicitly (Task 9's quirk).
     status: 'pending' as const,
+    fulfilmentStatus: 'unfulfilled' as const,
     amountTotal: 4200,
     items: [
       {

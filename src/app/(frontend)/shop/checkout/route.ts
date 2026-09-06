@@ -110,6 +110,7 @@ export async function POST(req: Request) {
       data: {
         stripeCheckoutSessionId: session.id,
         status: 'pending',
+        fulfilmentStatus: 'unfulfilled',
         amountTotal: product.price,
         termsAcceptedAt: new Date().toISOString(),
         items: [

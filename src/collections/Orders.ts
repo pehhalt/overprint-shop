@@ -1,22 +1,46 @@
 import type { CollectionConfig } from 'payload'
 import { isLoggedIn } from '@/access'
 
-// Orders are never written over HTTP. The only writer is the Stripe webhook
-// handler, running server-side, through Payload's Local API with
-// `overrideAccess: true`. Every other create/update/delete path — including an
-// authenticated admin hitting the REST or GraphQL API — must be refused, so
-// that a browser can never invent or alter a paid order.
+// Orders are never created or deleted over HTTP. The only writer of the money
+// and identity fields is the Stripe webhook handler, running server-side
+// through Payload's Local API with `overrideAccess: true`. A logged-in owner
+// may update an order, but only to mark it shipped: every field that must
+// never be hand-edited closes itself below with field-level `access.update`,
+// so that a browser can never invent or alter a paid order.
 export const Orders: CollectionConfig = {
   slug: 'orders',
   admin: {
     useAsTitle: 'stripeCheckoutSessionId',
-    defaultColumns: ['stripeCheckoutSessionId', 'status', 'amountTotal', 'paidAt'],
+    defaultColumns: [
+      'stripeCheckoutSessionId',
+      'status',
+      'fulfilmentStatus',
+      'shippingName',
+      'amountTotal',
+      'paidAt',
+    ],
   },
   access: {
     read: isLoggedIn,
     create: () => false,
-    update: () => false,
+    // Opened so the owner can mark an order shipped. Every field that must never be
+    // hand-edited closes itself below with field-level `access.update`. The webhook is
+    // unaffected: it writes with overrideAccess, which bypasses both.
+    update: isLoggedIn,
     delete: () => false,
+  },
+  hooks: {
+    beforeChange: [
+      // An owner marks an order shipped; the system records when. Leaving the
+      // timestamp hand-editable would let the two disagree.
+      ({ data, originalDoc }) => {
+        const was = originalDoc?.fulfilmentStatus
+        const now = data.fulfilmentStatus
+        if (now === 'shipped' && was !== 'shipped') data.fulfilledAt = new Date().toISOString()
+        if (now === 'unfulfilled' && was === 'shipped') data.fulfilledAt = null
+        return data
+      },
+    ],
   },
   fields: [
     {
@@ -25,14 +49,16 @@ export const Orders: CollectionConfig = {
       required: true,
       unique: true,
       index: true,
+      access: { update: () => false },
       admin: { description: "Stripe Checkout Session id. The idempotency key for this order." },
     },
-    { name: 'stripePaymentIntentId', type: 'text' },
-    { name: 'email', type: 'email' },
-    { name: 'shippingName', type: 'text' },
+    { name: 'stripePaymentIntentId', type: 'text', access: { update: () => false } },
+    { name: 'email', type: 'email', access: { update: () => false } },
+    { name: 'shippingName', type: 'text', access: { update: () => false } },
     {
       name: 'shippingAddress',
       type: 'group',
+      access: { update: () => false },
       fields: [
         { name: 'line1', type: 'text' },
         { name: 'line2', type: 'text' },
@@ -46,6 +72,7 @@ export const Orders: CollectionConfig = {
       type: 'select',
       required: true,
       defaultValue: 'pending',
+      access: { update: () => false },
       options: [
         { label: 'Pending', value: 'pending' },
         { label: 'Paid', value: 'paid' },
@@ -56,22 +83,40 @@ export const Orders: CollectionConfig = {
       name: 'amountTotal',
       type: 'number',
       required: true,
+      access: { update: () => false },
       admin: { description: 'Total charged, in cents.' },
     },
-    { name: 'paidAt', type: 'date' },
+    { name: 'paidAt', type: 'date', access: { update: () => false } },
     {
       name: 'termsAcceptedAt',
       type: 'date',
+      access: { update: () => false },
       admin: {
         readOnly: true,
-        description:
-          'When the customer ticked the terms box on the product page, before being sent to Stripe.',
+        description: 'When the server received the checkout request carrying the terms consent.',
       },
+    },
+    {
+      name: 'fulfilmentStatus',
+      type: 'select',
+      required: true,
+      defaultValue: 'unfulfilled',
+      options: [
+        { label: 'Unfulfilled', value: 'unfulfilled' },
+        { label: 'Shipped', value: 'shipped' },
+      ],
+    },
+    {
+      name: 'fulfilledAt',
+      type: 'date',
+      access: { update: () => false },
+      admin: { readOnly: true, description: 'Set automatically when marked shipped.' },
     },
     {
       name: 'items',
       type: 'array',
       required: true,
+      access: { update: () => false },
       fields: [
         { name: 'product', type: 'relationship', relationTo: 'products' },
         {
