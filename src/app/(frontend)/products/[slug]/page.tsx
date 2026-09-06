@@ -22,7 +22,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   if (!product) notFound()
 
   return (
-    <main className="mx-auto grid max-w-4xl gap-8 p-8 md:grid-cols-2">
+    <main className="mx-auto grid max-w-4xl gap-8 p-8 pt-4 md:grid-cols-2">
       {/* main is a two-column grid, so the trail spans both rather than
           becoming a column of its own */}
       <div className="md:col-span-2">
