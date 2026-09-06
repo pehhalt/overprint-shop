@@ -17,35 +17,7 @@ import 'dotenv/config'
 import sharp from 'sharp'
 import { getPayload } from 'payload'
 import config from '../src/payload.config.js'
-
-/**
- * Extracts a Supabase project ref from a Postgres connection string, supporting both
- * connection shapes used in this project:
- *   - Pooler (session/transaction): postgres.PROJECTREF@aws-...pooler.supabase.com
- *   - Direct connection:            postgres@db.PROJECTREF.supabase.co
- * Returns null when the URI isn't a recognisable Supabase connection string — that is
- * treated as "cannot determine", never as "safe".
- */
-function extractSupabaseProjectRef(databaseUri: string): string | null {
-  let parsed: URL
-  try {
-    parsed = new URL(databaseUri)
-  } catch {
-    return null
-  }
-
-  const username = decodeURIComponent(parsed.username)
-  if (username.startsWith('postgres.')) {
-    return username.slice('postgres.'.length) || null
-  }
-
-  const directMatch = /^db\.([^.]+)\.supabase\.co$/.exec(parsed.hostname)
-  if (directMatch) {
-    return directMatch[1]
-  }
-
-  return null
-}
+import { extractSupabaseProjectRef } from '../src/lib/supabase-project-ref.js'
 
 function refuseToSeed(reason: string): never {
   console.error(
