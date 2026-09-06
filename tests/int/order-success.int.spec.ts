@@ -34,15 +34,18 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getPayload, type Payload } from 'payload'
 import config from '@payload-config'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { findOrderBySessionId } from '@/lib/orders'
+import { findOrderBySessionId, ORDER_CONFIRMATION_WINDOW_MS } from '@/lib/orders'
 import SuccessPage from '@/app/(frontend)/order/success/page'
 
 const SESSION_PAID = 'cs_test_task12_paid'
 const SESSION_PENDING = 'cs_test_task12_pending'
 const SESSION_EXPIRED = 'cs_test_task12_expired'
 const SESSION_UNKNOWN = 'cs_test_task12_no_such_order'
+// A real order, but old enough that the confirmation page must refuse to
+// disclose it — the Finding-1 fix under test.
+const SESSION_STALE = 'cs_test_task12_stale_31min'
 
-const ALL_FIXTURE_SESSION_IDS = [SESSION_PAID, SESSION_PENDING, SESSION_EXPIRED]
+const ALL_FIXTURE_SESSION_IDS = [SESSION_PAID, SESSION_PENDING, SESSION_EXPIRED, SESSION_STALE]
 
 // Deliberately distinct from every seeded product's name/price, so a test
 // failure here can only mean the page rendered the snapshot (correct) or
@@ -51,13 +54,18 @@ const ALL_FIXTURE_SESSION_IDS = [SESSION_PAID, SESSION_PENDING, SESSION_EXPIRED]
 const SNAPSHOT_NAME = 'Task12 Fixture Snapshot Shirt'
 const SNAPSHOT_UNIT_AMOUNT = 3399 // EUR 33.99, an odd figure unlikely to collide with anything
 
-function fixtureOrderData(sessionId: string, status: 'pending' | 'paid' | 'expired') {
+function fixtureOrderData(
+  sessionId: string,
+  status: 'pending' | 'paid' | 'expired',
+  options: { createdAt?: string } = {},
+) {
   return {
     stripeCheckoutSessionId: sessionId,
     status,
     email: 'buyer@example.com',
     amountTotal: SNAPSHOT_UNIT_AMOUNT * 2,
     paidAt: status === 'paid' ? new Date().toISOString() : null,
+    ...(options.createdAt ? { createdAt: options.createdAt } : {}),
     items: [
       {
         nameSnapshot: SNAPSHOT_NAME,
@@ -95,6 +103,15 @@ describe('/order/success (Task 12)', () => {
       collection: 'orders',
       overrideAccess: true,
       data: fixtureOrderData(SESSION_EXPIRED, 'expired'),
+    })
+    await payload.create({
+      collection: 'orders',
+      overrideAccess: true,
+      data: fixtureOrderData(SESSION_STALE, 'paid', {
+        // One minute past the confirmation window, so this is unambiguously
+        // stale rather than borderline.
+        createdAt: new Date(Date.now() - ORDER_CONFIRMATION_WINDOW_MS - 60_000).toISOString(),
+      }),
     })
   })
 
@@ -165,10 +182,10 @@ describe('/order/success (Task 12)', () => {
       expect(html.toLowerCase()).not.toContain('confirming your payment')
     })
 
-    it('renders the not-found state for an unknown session id, without throwing', async () => {
+    it('renders the expired-link state for an unknown session id, without throwing', async () => {
       const html = await renderSuccessPage(SESSION_UNKNOWN)
 
-      expect(html.toLowerCase()).toContain('could not find')
+      expect(html.toLowerCase()).toContain('expired')
       expect(html).toContain('/">')
     })
 
@@ -181,6 +198,41 @@ describe('/order/success (Task 12)', () => {
     it('never displays the customer email address', async () => {
       const html = await renderSuccessPage(SESSION_PAID)
       expect(html).not.toContain('buyer@example.com')
+    })
+  })
+
+  describe('confirmation link expiry (Finding 1: no expiry on a capability URL)', () => {
+    it('does not disclose a real order older than the 30-minute confirmation window', async () => {
+      const html = await renderSuccessPage(SESSION_STALE)
+
+      expect(html.toLowerCase()).toContain('expired')
+      // The order is real, paid, and has line items — none of that may leak.
+      expect(html).not.toContain(SNAPSHOT_NAME)
+      expect(html).not.toContain('33.99')
+      expect(html).not.toContain('67.98')
+      expect(html.toLowerCase()).not.toContain('thank you')
+      expect(html.toLowerCase()).not.toContain('paid')
+    })
+
+    it('renders a stale-but-real order and an unknown session id identically', async () => {
+      // This is the anti-enumeration guarantee: the page must not let a
+      // caller distinguish "this id belongs to a real, old order" from
+      // "this id was never a real order" — otherwise the page itself
+      // becomes an oracle for testing whether a session id is real.
+      const staleHtml = await renderSuccessPage(SESSION_STALE)
+      const unknownHtml = await renderSuccessPage(SESSION_UNKNOWN)
+
+      expect(staleHtml).toBe(unknownHtml)
+    })
+
+    it('still renders a fresh order normally (expiry does not affect recent orders)', async () => {
+      // SESSION_PAID was created moments ago in beforeAll, so it must render
+      // in full — the expiry check must not be so aggressive it breaks the
+      // ordinary "just checked out" case.
+      const html = await renderSuccessPage(SESSION_PAID)
+
+      expect(html).toContain(SNAPSHOT_NAME)
+      expect(html.toLowerCase()).toContain('thank you')
     })
   })
 })
