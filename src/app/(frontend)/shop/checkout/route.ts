@@ -2,17 +2,25 @@ import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import { stripe } from '@/lib/stripe'
-import { CURRENCY } from '@/lib/constants'
+import { CURRENCY, isValidSize } from '@/lib/constants'
 
 // Payload owns /api/[...slug]; our shop-specific handlers live outside it.
 export const runtime = 'nodejs'
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => null)) as { productId?: unknown } | null
+  const body = (await req.json().catch(() => null)) as {
+    productId?: unknown
+    size?: unknown
+  } | null
   const productId = body?.productId
+  const size = body?.size
 
   if (!productId || typeof productId !== 'string') {
     return NextResponse.json({ error: 'productId is required' }, { status: 400 })
+  }
+
+  if (!isValidSize(size)) {
+    return NextResponse.json({ error: 'A valid size is required' }, { status: 400 })
   }
 
   const payload = await getPayload({ config: configPromise })
@@ -54,7 +62,7 @@ export async function POST(req: Request) {
           price_data: {
             currency: CURRENCY,
             unit_amount: product.price,
-            product_data: { name: product.name },
+            product_data: { name: `${product.name} — ${size}` },
           },
         },
       ],

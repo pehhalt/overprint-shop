@@ -48,6 +48,7 @@ const SOLD_OUT_NAME = 'Task10 Fixture Product (checkout, sold out)'
 const SESSION_ID_PRICE_TEST = 'task10-fixture-cs_test_charges_db_price'
 const SESSION_ID_ORDER_TEST = 'task10-fixture-cs_test_writes_pending_order'
 const SESSION_ID_MANAGED_PAYMENTS_TEST = 'task10-fixture-cs_test_managed_payments_disabled'
+const SESSION_ID_SIZE_TEST = 'task10-fixture-cs_test_size_in_line_item'
 
 function request(body: unknown) {
   return new Request('http://localhost:3000/shop/checkout', {
@@ -127,14 +128,21 @@ describe('POST /shop/checkout (Task 10)', () => {
       collection: 'orders',
       where: {
         stripeCheckoutSessionId: {
-          in: [SESSION_ID_PRICE_TEST, SESSION_ID_ORDER_TEST, SESSION_ID_MANAGED_PAYMENTS_TEST],
+          in: [
+            SESSION_ID_PRICE_TEST,
+            SESSION_ID_ORDER_TEST,
+            SESSION_ID_MANAGED_PAYMENTS_TEST,
+            SESSION_ID_SIZE_TEST,
+          ],
         },
       },
       limit: 10,
       overrideAccess: true,
     })
     for (const doc of remainingOrders.docs) {
-      await payload.delete({ collection: 'orders', id: doc.id, overrideAccess: true }).catch(() => {})
+      await payload
+        .delete({ collection: 'orders', id: doc.id, overrideAccess: true })
+        .catch(() => {})
     }
 
     const remainingProducts = await payload.find({
@@ -156,7 +164,9 @@ describe('POST /shop/checkout (Task 10)', () => {
     })
 
     // The request body lies about the price. The handler must ignore it.
-    const response = await POST(request({ productId: String(availableProductId), price: 1 }))
+    const response = await POST(
+      request({ productId: String(availableProductId), size: 'M', price: 1 }),
+    )
 
     expect(response.status).toBe(200)
     expect(sessionsCreate).toHaveBeenCalledOnce()
@@ -171,7 +181,7 @@ describe('POST /shop/checkout (Task 10)', () => {
       url: 'https://checkout.stripe.com/y',
     })
 
-    const response = await POST(request({ productId: String(availableProductId) }))
+    const response = await POST(request({ productId: String(availableProductId), size: 'M' }))
     expect(response.status).toBe(200)
 
     const found = await payload.find({
@@ -195,7 +205,7 @@ describe('POST /shop/checkout (Task 10)', () => {
       overrideAccess: true,
     })
 
-    const response = await POST(request({ productId: String(soldOutProductId) }))
+    const response = await POST(request({ productId: String(soldOutProductId), size: 'M' }))
     const data = await response.json()
 
     expect(response.status).toBe(409)
@@ -223,7 +233,7 @@ describe('POST /shop/checkout (Task 10)', () => {
       url: 'https://checkout.stripe.com/managed-payments',
     })
 
-    await POST(request({ productId: String(availableProductId) }))
+    await POST(request({ productId: String(availableProductId), size: 'M' }))
 
     expect(sessionsCreate).toHaveBeenCalledOnce()
     const args = sessionsCreate.mock.calls[0][0]
@@ -239,6 +249,45 @@ describe('POST /shop/checkout (Task 10)', () => {
     expect(sessionsCreate).not.toHaveBeenCalled()
   })
 
+  it('rejects a request with no size', async () => {
+    const response = await POST(request({ productId: String(availableProductId) }))
+    expect(response.status).toBe(400)
+    expect(sessionsCreate).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invented size, creating no Stripe session and no order row', async () => {
+    const before = await payload.find({
+      collection: 'orders',
+      where: { 'items.product': { equals: availableProductId } },
+      overrideAccess: true,
+    })
+
+    for (const bad of ['XXL', '<script>', '', 'm ', 's', 42, null]) {
+      const response = await POST(request({ productId: String(availableProductId), size: bad }))
+      expect(response.status, `size ${JSON.stringify(bad)} should be refused`).toBe(400)
+    }
+    expect(sessionsCreate).not.toHaveBeenCalled()
+
+    const after = await payload.find({
+      collection: 'orders',
+      where: { 'items.product': { equals: availableProductId } },
+      overrideAccess: true,
+    })
+    expect(after.totalDocs).toBe(before.totalDocs)
+  })
+
+  it('puts the chosen size in the Stripe line item name', async () => {
+    sessionsCreate.mockResolvedValue({
+      id: SESSION_ID_SIZE_TEST,
+      url: 'https://checkout.stripe.com/size',
+    })
+
+    await POST(request({ productId: String(availableProductId), size: 'L' }))
+
+    const args = sessionsCreate.mock.calls[0][0]
+    expect(args.line_items[0].price_data.product_data.name).toBe(`${AVAILABLE_NAME} — L`)
+  })
+
   it('returns 502 with a JSON error body when Stripe fails, and writes no order', async () => {
     sessionsCreate.mockRejectedValue(new Error('Stripe is down (simulated)'))
 
@@ -248,7 +297,7 @@ describe('POST /shop/checkout (Task 10)', () => {
       overrideAccess: true,
     })
 
-    const response = await POST(request({ productId: String(availableProductId) }))
+    const response = await POST(request({ productId: String(availableProductId), size: 'M' }))
     // A non-JSON 500 is exactly the bug this test guards against — the
     // response must always be parseable JSON, whatever the status.
     const data = await response.json()
@@ -273,10 +322,12 @@ describe('POST /shop/checkout (Task 10)', () => {
     })
     sessionsExpire.mockResolvedValue({ id: SESSION_ID_EXPIRE_TEST, status: 'expired' })
 
-    const createSpy = vi.spyOn(payload, 'create').mockRejectedValueOnce(new Error('DB write failed (simulated)'))
+    const createSpy = vi
+      .spyOn(payload, 'create')
+      .mockRejectedValueOnce(new Error('DB write failed (simulated)'))
 
     try {
-      const response = await POST(request({ productId: String(availableProductId) }))
+      const response = await POST(request({ productId: String(availableProductId), size: 'M' }))
       const data = await response.json()
 
       expect(response.status).toBe(502)
