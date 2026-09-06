@@ -448,6 +448,21 @@ were done, each on its own branch with its own PR.
 Not attempted: a custom domain, a scheduled health check, and a second owner-editable
 collection such as an About or FAQ page.
 
+## What this is not
+
+The shop demonstrates the two halves the brief asks for — an owner-editable catalogue and a
+payment confirmed by a verified webhook. It is not a business. Print-on-demand is its
+premise, not an integration: **no fulfilment provider is contacted, nothing is printed, and
+nothing ships.**
+
+[`docs/what-a-real-shop-would-need.md`](docs/what-a-real-shop-would-need.md) is the gap
+list — what sits between this and a shop that could take an order and post a shirt. It
+covers the missing provider integration, why a display image is not a print file, how the
+money actually flows between Stripe, you and the printer, the customer emails that do not
+exist, and the legal position that changes the moment anything is sold for real. It also
+names the one thing that would block a real shop on day one: the catalogue is built on band
+names.
+
 ## Known limitations
 
 Recorded here rather than left for a reviewer to find on their own:
@@ -496,6 +511,10 @@ Recorded here rather than left for a reviewer to find on their own:
   webhook delivery log showing a 200, the rollback before and after, the pull-request
   history, and the live endpoint checks. It also lists, honestly, what was *not*
   captured.
+- [`docs/what-a-real-shop-would-need.md`](docs/what-a-real-shop-would-need.md) — the gap
+  between this demonstration and an operating print-on-demand business: fulfilment, print
+  files, how the money moves, customer email, and what changes legally once anything is
+  really sold.
 - [`docs/go-live-plan.md`](docs/go-live-plan.md) — what switching this shop from
   Stripe sandbox to real, live payments would require. Nothing in it has been
   executed; it's a plan, not a log.
