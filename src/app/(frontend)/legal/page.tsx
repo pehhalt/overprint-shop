@@ -42,11 +42,15 @@ export default function LegalPage() {
         details themselves go straight to Stripe — we never see or store them.
       </p>
       <p className="mt-2 text-neutral-700">
-        We keep the order record to perform the contract of sale. Vercel and Supabase process this
-        data as our processors, acting only on our instructions. Stripe processes payment data as
-        an independent controller, and performs its own fraud screening on it under its own
-        legitimate interests — it decides its own purposes and means for that data, so it answers
-        for it on its own terms, not ours.
+        Our lawful basis is not the same for every item. Your email, name, shipping address, order
+        contents and the Stripe identifiers are held to perform the contract of sale (Art. 6(1)(b)
+        GDPR). The consent timestamp is held under our legitimate interest in being able to show
+        that the terms were accepted before an order was placed (Art. 6(1)(f)) — it is a record
+        that consent was given, not data we hold on the strength of that consent. Vercel and
+        Supabase process all of it as our processors, acting only on our instructions. Stripe
+        processes payment data as an independent controller, and performs its own fraud screening
+        on it under its own legitimate interests — it decides its own purposes and means for that
+        data, so it answers for it on its own terms, not ours.
       </p>
       <p className="mt-2 text-neutral-700">
         Data is stored in AWS eu-west-1, with serverless functions pinned to the dub1 region. Our
@@ -58,10 +62,13 @@ export default function LegalPage() {
       </p>
       <p className="mt-2 text-neutral-700">
         To exercise your rights of access, rectification, erasure, or portability, email the
-        address above. These are not self-service or automated: an operator with database access
-        acts on your request by hand. We cannot erase data held by Stripe: it is an independent
-        controller with its own retention obligations, so you will need to contact Stripe directly
-        for that.
+        address above. None of these is self-service or automated: an operator with database
+        access acts on your request by hand. Access, portability and erasure each have a
+        maintenance script the operator runs. Rectification has none — the fields holding your
+        name, email and address are deliberately locked against editing from the admin panel and
+        the API, so a correction is made by the operator directly against the database. We cannot
+        erase data held by Stripe: it is an independent controller with its own retention
+        obligations, so you will need to contact Stripe directly for that.
       </p>
 
       <h2 className="mt-8 text-lg font-semibold">Not legal advice</h2>
