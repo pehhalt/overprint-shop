@@ -42,5 +42,20 @@ export const Media: CollectionConfig = {
       required: true,
       admin: { description: 'Describes the image for screen readers.' },
     },
+    {
+      name: 'generatedBy',
+      type: 'select',
+      required: true,
+      defaultValue: 'unknown',
+      options: [
+        { label: 'AI-generated', value: 'ai' },
+        { label: 'Photograph', value: 'photograph' },
+        { label: 'Unknown', value: 'unknown' },
+      ],
+      admin: {
+        description:
+          'How this image was made. AI-generated images are labelled on the public site — the EU AI Act requires disclosing artificially generated image content.',
+      },
+    },
   ],
 }

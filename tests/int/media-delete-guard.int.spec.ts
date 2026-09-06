@@ -41,7 +41,7 @@ describe('Media beforeDelete guard (Finding 1)', () => {
     const buffer = await makePhotoBuffer()
     const media = await payload.create({
       collection: 'media',
-      data: { alt: FIXTURE_ALT },
+      data: { alt: FIXTURE_ALT, generatedBy: 'photograph' },
       file: {
         data: buffer,
         mimetype: 'image/png',

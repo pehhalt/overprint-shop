@@ -65,7 +65,7 @@ describe('Product price validation, end to end (Finding 2)', () => {
 
     const media = await payload.create({
       collection: 'media',
-      data: { alt: FIXTURE_ALT },
+      data: { alt: FIXTURE_ALT, generatedBy: 'photograph' },
       file: {
         data: buffer,
         mimetype: 'image/png',

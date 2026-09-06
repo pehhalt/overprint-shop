@@ -81,7 +81,7 @@ describe('POST /shop/checkout (Task 10)', () => {
     const buffer = await makePhotoBuffer()
     const media = await payload.create({
       collection: 'media',
-      data: { alt: FIXTURE_ALT },
+      data: { alt: FIXTURE_ALT, generatedBy: 'photograph' },
       file: {
         data: buffer,
         mimetype: 'image/png',

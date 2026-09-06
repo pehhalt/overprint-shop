@@ -235,7 +235,8 @@ async function main() {
 
     const media = await payload.create({
       collection: 'media',
-      data: { alt: product.alt },
+      // 'photograph', not 'ai': these are sharp-rendered solid colours, not model output.
+      data: { alt: product.alt, generatedBy: 'photograph' },
       file: {
         data: buffer,
         mimetype: 'image/png',

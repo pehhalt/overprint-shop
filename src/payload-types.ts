@@ -156,6 +156,10 @@ export interface Media {
    * Describes the image for screen readers.
    */
   alt: string;
+  /**
+   * How this image was made. AI-generated images are labelled on the public site — the EU AI Act requires disclosing artificially generated image content.
+   */
+  generatedBy: 'ai' | 'photograph' | 'unknown';
   updatedAt: string;
   createdAt: string;
   url?: string | null;
@@ -357,6 +361,7 @@ export interface UsersSelect<T extends boolean = true> {
  */
 export interface MediaSelect<T extends boolean = true> {
   alt?: T;
+  generatedBy?: T;
   updatedAt?: T;
   createdAt?: T;
   url?: T;

@@ -3,6 +3,7 @@ import configPromise from '@payload-config'
 import { notFound } from 'next/navigation'
 import { formatPrice } from '@/lib/constants'
 import { BuyButton } from './BuyButton'
+import { ProductImage } from '../../ProductImage'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,9 +23,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   return (
     <main className="mx-auto grid max-w-4xl gap-8 p-8 md:grid-cols-2">
       {typeof product.photo === 'object' && product.photo?.url && (
-        <img
-          src={product.photo.url}
-          alt={product.photo.alt ?? product.name}
+        <ProductImage
+          media={product.photo}
           className="aspect-square w-full rounded-lg object-cover"
         />
       )}

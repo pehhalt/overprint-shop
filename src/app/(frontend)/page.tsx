@@ -2,6 +2,7 @@ import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import Link from 'next/link'
 import { formatPrice, SHOP_NAME } from '@/lib/constants'
+import { ProductImage } from './ProductImage'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,9 +24,8 @@ export default async function CataloguePage() {
           <li key={product.id} className="rounded-lg border p-4">
             <Link href={`/products/${product.slug}`}>
               {typeof product.photo === 'object' && product.photo?.url && (
-                <img
-                  src={product.photo.url}
-                  alt={product.photo.alt ?? product.name}
+                <ProductImage
+                  media={product.photo}
                   className="aspect-square w-full rounded object-cover"
                 />
               )}
