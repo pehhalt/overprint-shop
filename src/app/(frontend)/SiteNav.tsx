@@ -29,7 +29,7 @@ export function SiteNav() {
             // is the same fact drawn for everyone else. The transparent border
             // on inactive links keeps the text from shifting when it changes.
             aria-current={current ? 'page' : undefined}
-            className={`border-b-2 pb-1 uppercase ${
+            className={`whitespace-nowrap border-b-2 pb-1 uppercase ${
               current
                 ? 'border-red-600 text-neutral-900'
                 : 'border-transparent text-neutral-700 hover:text-red-600'
