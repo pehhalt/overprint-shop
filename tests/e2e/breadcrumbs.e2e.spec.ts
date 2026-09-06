@@ -48,3 +48,18 @@ test('the admin panel has no breadcrumb', async ({ page }) => {
   await page.goto('/admin')
   await expect(crumbs(page)).toHaveCount(0)
 })
+
+// The product page is a two-column grid on desktop and a single column on a
+// phone, so DOM order decides what a phone reader sees first. The title has to
+// come before the image, the way every other page leads with its heading.
+for (const width of [390, 1280]) {
+  test(`the product title sits above the image at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('/products/midnight-tee')
+
+    const title = await page.getByRole('heading', { name: 'Midnight Tee', level: 1 }).boundingBox()
+    const image = await page.locator('main figure img').first().boundingBox()
+
+    expect(title!.y).toBeLessThan(image!.y)
+  })
+}

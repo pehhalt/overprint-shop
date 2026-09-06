@@ -20,7 +20,7 @@ export const metadata = {
 
 function NoOrder({ heading }: { heading: string }) {
   return (
-    <main className="mx-auto max-w-xl p-8 pt-4">
+    <main className="mx-auto max-w-xl p-8 pt-2.5">
       <Breadcrumbs trail={[{ label: 'Order confirmation' }]} />
       <h1 className="text-2xl font-bold">{heading}</h1>
       <Link href="/" className="mt-4 inline-block underline">
@@ -37,7 +37,7 @@ function NoOrder({ heading }: { heading: string }) {
 // could be used to test whether a given session id belongs to a real order.
 function ExpiredLink() {
   return (
-    <main className="mx-auto max-w-xl p-8 pt-4">
+    <main className="mx-auto max-w-xl p-8 pt-2.5">
       <Breadcrumbs trail={[{ label: 'Order confirmation' }]} />
       <h1 className="text-2xl font-bold">This confirmation link has expired</h1>
       <p className="mt-2 text-neutral-600">
@@ -80,7 +80,7 @@ export default async function SuccessPage({
   // wrote.
   if (order.status === 'expired') {
     return (
-      <main className="mx-auto max-w-xl p-8 pt-4">
+      <main className="mx-auto max-w-xl p-8 pt-2.5">
         <Breadcrumbs trail={[{ label: 'Order confirmation' }]} />
         <h1 className="text-2xl font-bold">This checkout expired</h1>
         <p className="mt-2 text-neutral-600">
@@ -97,7 +97,7 @@ export default async function SuccessPage({
   const isPaid = order.status === 'paid'
 
   return (
-    <main className="mx-auto max-w-xl p-8 pt-4">
+    <main className="mx-auto max-w-xl p-8 pt-2.5">
       <Breadcrumbs trail={[{ label: 'Order confirmation' }]} />
       <h1 className="text-2xl font-bold">
         {isPaid ? 'Thank you — your order is paid' : 'Confirming your payment…'}
