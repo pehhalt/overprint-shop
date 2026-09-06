@@ -7,7 +7,7 @@
  * fields is the Stripe webhook handler, running server-side through Payload's
  * Local API with `overrideAccess: true`.
  *
- * "Closed to the API" has several halves, and proving only one of them is not
+ * "Closed to the API" has several parts, and proving only one of them is not
  * enough:
  *   1. An unauthenticated REST POST to /api/orders must be refused.
  *   2. An *authenticated* REST POST — a real admin, logged in — must be
@@ -40,6 +40,7 @@ const FIXTURE_SESSION_ID_REST_AUTH = 'task9-fixture-cs_test_rest_auth'
 const FIXTURE_SESSION_ID_LOCAL_OVERRIDE = 'task9-fixture-cs_test_local_override'
 const FIXTURE_SESSION_ID_LOCAL_NO_OVERRIDE = 'task9-fixture-cs_test_local_no_override'
 const FIXTURE_SESSION_ID_UPDATE = 'task9-fixture-cs_test_field_level_update'
+const FIXTURE_SESSION_ID_UPDATE_PAID = 'task9-fixture-cs_test_field_level_update_paid'
 const FIXTURE_ADMIN_EMAIL = 'task9-fixture-admin@overprint.local'
 const FIXTURE_ADMIN_PASSWORD = 'task9-fixture-password-CHANGE-ME-123!'
 
@@ -99,6 +100,7 @@ describe('Orders access control (Task 9)', () => {
   let adminId: number
   let adminToken: string
   let updatableOrderId: number
+  let updatablePaidOrderId: number
 
   beforeAll(async () => {
     payload = await getPayload({ config })
@@ -126,6 +128,21 @@ describe('Orders access control (Task 9)', () => {
       overrideAccess: true,
     })
     updatableOrderId = updatable.id
+
+    // A second fixture, already paid. On the `pending` one above, "the denied write was
+    // rolled back" and "the field was reset to its `defaultValue`" both look like
+    // `status === 'pending'` — indistinguishable, and the payment-integrity claim rests
+    // on that assertion. On a paid order they are not the same value.
+    const updatablePaid = await payload.create({
+      collection: 'orders',
+      data: {
+        ...fixtureOrderPayload(FIXTURE_SESSION_ID_UPDATE_PAID),
+        status: 'paid' as const,
+        paidAt: new Date().toISOString(),
+      },
+      overrideAccess: true,
+    })
+    updatablePaidOrderId = updatablePaid.id
   })
 
   afterAll(async () => {
@@ -139,6 +156,7 @@ describe('Orders access control (Task 9)', () => {
             FIXTURE_SESSION_ID_LOCAL_OVERRIDE,
             FIXTURE_SESSION_ID_LOCAL_NO_OVERRIDE,
             FIXTURE_SESSION_ID_UPDATE,
+            FIXTURE_SESSION_ID_UPDATE_PAID,
           ],
         },
       },
@@ -256,6 +274,32 @@ describe('Orders access control (Task 9)', () => {
       overrideAccess: true,
     })
     expect(after.status).toBe(before.status)
+    expect(after.paidAt).toBe(before.paidAt)
+    expect(after.amountTotal).toBe(before.amountTotal)
+  })
+
+  it('cannot un-pay a paid order, or clear its paidAt, over REST', async () => {
+    const before = await payload.findByID({
+      collection: 'orders',
+      id: updatablePaidOrderId,
+      overrideAccess: true,
+    })
+    expect(before.status).toBe('paid')
+
+    await patchOrderOverRest(
+      updatablePaidOrderId,
+      { status: 'pending', paidAt: null, amountTotal: 1 },
+      adminToken,
+    )
+
+    const after = await payload.findByID({
+      collection: 'orders',
+      id: updatablePaidOrderId,
+      overrideAccess: true,
+    })
+    // 'paid' is not the field's defaultValue, so this can only be the existing value
+    // surviving — the distinction the pending fixture above cannot make.
+    expect(after.status).toBe('paid')
     expect(after.paidAt).toBe(before.paidAt)
     expect(after.amountTotal).toBe(before.amountTotal)
   })
