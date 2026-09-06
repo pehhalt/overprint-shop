@@ -7,32 +7,72 @@ Live shop: https://overprint-shop.vercel.app · Sandbox preview: https://overpri
 
 ---
 
+## The owner edits content and it goes live with no redeploy
+
+| File | Shows |
+|---|---|
+| [`09-admin-product-edit.png`](./09-admin-product-edit.png) | `SoulKabine`'s price changed to `2400` in the **production** admin panel and saved — "Updated successfully", last modified 02:20 local time |
+
+The other half of that proof is timing, which is stronger than a second screenshot:
+
+```
+Last production deployment:  2026-09-06T00:01:40Z
+Product edited in the panel: 2026-09-06T00:20Z   (02:20 local)
+Live site immediately after: SoulKabine €24.00
+Deployments in between:      none
+```
+
+The edit landed nineteen minutes after the last deploy and appeared on the live site with no
+workflow run of any kind. Note also the field's own help text — *"Price in cents, as an
+integer. 2500 means EUR 25.00"* — which is how the integer-cents constraint is surfaced to a
+non-technical owner.
+
+---
+
 ## Payment confirmed only by a verified webhook
 
 | File | Shows |
 |---|---|
 | [`01-checkout-success-production.png`](./01-checkout-success-production.png) | The confirmation page on the **live shop** after paying with `4242 4242 4242 4242` |
-| [`02-card-declined-production.png`](./02-card-declined-production.png) | Stripe's hosted checkout on the **live shop** refusing `4000 0000 0000 0002`. The message is in German: *"Ihre Kreditkarte wurde abgelehnt"* — "your credit card was declined". Note the **Sandbox** badge beside the shop name |
-| [`03-webhook-delivery-200.png`](./03-webhook-delivery-200.png) | Stripe's delivery log for the **Overprint production** endpoint (`https://overprint-shop.vercel.app/shop/stripe-webhook`): `checkout.session.completed`, **200 OK**, Delivered |
+| [`02-card-declined-production.png`](./02-card-declined-production.png) | Stripe's hosted checkout on the **live shop** refusing `4000 0000 0000 0002`. The message is German: *"Ihre Kreditkarte wurde abgelehnt"* — "your credit card was declined". Note the **Sandbox** badge |
+| [`03-webhook-delivery-200.png`](./03-webhook-delivery-200.png) | Stripe's delivery log for the **Overprint production** endpoint: `checkout.session.completed`, **200 OK**, Delivered |
+| [`08-admin-orders.png`](./08-admin-orders.png) | The Orders collection in the production admin panel — one `Paid` with a timestamp, two `Pending` |
 | [`04-checkout-success-preview.png`](./04-checkout-success-preview.png) | The same success flow on the sandbox preview |
 | [`05-card-declined-preview.png`](./05-card-declined-preview.png) | The same decline on the sandbox preview |
 
-**Exactly one delivery appears in the log.** The declined card produced no Stripe event at
-all, which is why the order it created is still `pending` — the evidence for the decline is
-the absence of a delivery combined with the presence of an unpaid order.
+**Exactly one delivery appears in Stripe's log**, matching the one successful purchase. The
+declined card produced no Stripe event at all.
 
-Database state after the two production card runs:
+Production database state:
 
 ```
-#2  PAID     2300 cents   Rambling Men - T-Shirt
+#2  PAID     2300 cents   Rambling Men - T-Shirt   paid via verified webhook
     paidAt = 2026-09-06 00:55:13   intent = pi_3UCSUNGqFQLExwlb1LJjzV7o
-#3  PENDING  2300 cents   The Chilis - T-Shirt
-    paidAt = (null)       intent = (null)
+#3  PENDING  2300 cents   The Chilis - T-Shirt     card declined
+#4  PENDING  2300 cents   SoulKabine               checkout abandoned
 ```
 
-An order is created `pending` when checkout starts, and only the signature-verified webhook
-flips it to `paid`. A declined card therefore leaves a visible unpaid row rather than
-nothing at all.
+Three orders, and the third is worth reading carefully. **A declined card and an abandoned
+checkout are indistinguishable in this data** — both are simply "not paid", with no
+`paidAt` and no payment intent. That is the correct outcome for both, and it is what the
+design buys: an order only ever becomes `paid` on a verified webhook, so every other
+route through the system leaves it `pending`, whatever the reason.
+
+Orders are created `pending` when checkout starts. Nothing else in the system can mark one
+paid — `create`, `update` and `delete` are closed to every HTTP path, and the webhook writes
+through Payload's Local API.
+
+---
+
+## Sold-out state
+
+| File | Shows |
+|---|---|
+| [`10-sold-out-live.png`](./10-sold-out-live.png) | "The Spix" showing as sold out on the live shop, with no buy button |
+
+Checked at the API level too: `POST /shop/checkout` for that product returns **HTTP 409**,
+creating no Stripe session and no order row. The guard is server-side, not just a hidden
+button.
 
 ---
 
@@ -40,10 +80,16 @@ nothing at all.
 
 | File | Shows |
 |---|---|
-| [`06-rollback-site-broken.png`](./06-rollback-site-broken.png) | The **live site** serving a deliberately broken heading after the break was promoted to production |
-| [`07-rollback-site-restored.png`](./07-rollback-site-restored.png) | The live site healthy again after Vercel's instant rollback — no rebuild, no deploy |
+| [`06-rollback-site-broken.png`](./06-rollback-site-broken.png) | The **live site** serving a deliberately broken heading after the break was promoted |
+| [`07-rollback-site-restored.png`](./07-rollback-site-restored.png) | The live site healthy again after Vercel's instant rollback — no rebuild |
+| [`11-vercel-rollback.png`](./11-vercel-rollback.png) | Vercel's Deployments list, filtered to **Production**: PR #11's deployment marked failed, PR #7's re-promoted by the rollback, PR #13 now current |
 
 Full write-up, including the two things that went wrong: [`../rollback-rehearsal.md`](../rollback-rehearsal.md).
+
+That deployments list is also the evidence for a finding in the write-up: with the filter
+**off**, three preview deployments sat between the broken build and the last live one, and
+`Instant Rollback` was greyed out on all of them. Filtering to Production is what makes the
+valid target obvious.
 
 ---
 
@@ -59,9 +105,9 @@ Full write-up, including the two things that went wrong: [`../rollback-rehearsal
 }
 ```
 
-`git.deploymentEnabled: false` switches off Vercel's own git deploys on every branch, so
-only the GitHub Actions workflows can ship. Vercel's Git integration was additionally never
-connected to this repository, so no deployment has ever originated outside the pipeline.
+`git.deploymentEnabled: false` switches off Vercel's own git deploys on every branch.
+Vercel's Git integration was additionally never connected to this repository, so no
+deployment has ever originated outside the pipeline.
 
 Workflow runs to date:
 
@@ -69,14 +115,12 @@ Workflow runs to date:
 14  CI                      success
  9  Deploy sandbox preview  success
  4  Deploy production       success
- 1  Deploy sandbox preview  failure     (the first attempt; see below)
- 1  Deploy sandbox preview  cancelled   (a hang, diagnosed and fixed)
+ 1  Deploy sandbox preview  failure     (an empty VERCEL_TOKEN secret)
+ 1  Deploy sandbox preview  cancelled   (payload migrate hung; pool too small)
 ```
 
-The failure and the cancellation are left in the history deliberately. They were real: an
-empty `VERCEL_TOKEN` secret, and a `payload migrate` that hung because the connection pool
-was too small for it. Both are documented in [`../rollback-rehearsal.md`](../rollback-rehearsal.md)
-and the project README's limitations section.
+Both failures are left in the history deliberately. They were real, they are documented, and
+a pipeline with no failures in it would be the less honest artefact.
 
 ---
 
@@ -115,9 +159,9 @@ https://overprint-staging.vercel.app    /=200  api=200  unsigned-webhook=400  to
 
 Production serves the owner's four real products; preview serves three generated development
 fixtures. They are different Supabase projects (`wdjtkrplvqbkxsfthmgk` and
-`mhkkjrulpeavwawvfvbn`), verified by connecting to each. Each environment also has its own
-Vercel Blob store — visible in the image URLs themselves, which differ by host — and its own
-`PAYLOAD_SECRET` and Stripe webhook signing secret.
+`mhkkjrulpeavwawvfvbn`), verified by connecting to each. Each environment has its own Vercel
+Blob store — visible in the image URLs, which differ by host — its own `PAYLOAD_SECRET`, and
+its own Stripe webhook signing secret.
 
 `unsigned-webhook=400` on both is the security property, live: an unsigned POST to the
 webhook endpoint is rejected on each environment.
@@ -126,30 +170,23 @@ webhook endpoint is rejected on each environment.
 
 ## Access control
 
-The graded rule is "anyone can view products, only a logged-in admin can change them",
-verified against the deployed site rather than in a test:
+The graded rule — "anyone can view products, only a logged-in admin can change them" —
+verified against the deployed site rather than only in a test:
 
 ```
 GET  /api/products   -> 200   anyone may read
 POST /api/products   -> 403   an anonymous write is refused
 ```
 
-The Playwright suite additionally asserts that the product count does not increase after the
-refused write — a 403 that still wrote a row would otherwise pass a status-only check.
+The Playwright suite additionally asserts the product count does not increase after the
+refused write, since a 403 that still wrote a row would pass a status-only check.
 
 ---
 
-## Not captured here
+## Not captured
 
-Honest list of things a reviewer might expect and will not find:
-
-- **A screenshot of a product being edited in the admin panel.** The no-redeploy claim is
-  evidenced by timing instead: the four production products were created after the last
-  deployment, with no workflow run in between, and appeared live immediately.
-- **A screenshot of the Orders list in the admin panel.** The database state above is the
-  same evidence in a more precise form.
-- **A screenshot of the Vercel deployments list showing the rollback.** The before-and-after
-  screenshots of the live site cover the outcome; the deployment list would show the
-  mechanism.
-- **A sold-out product on the live site.** It exists — "The Spix" is marked sold out and its
-  checkout is refused with HTTP 409, confirmed live — but was not captured.
+- **A screenshot of the live catalogue immediately after the price edit.** The timing
+  evidence above covers the same claim: the edit is live and no deployment ran.
+- **An upload larger than 4.5 MB.** `clientUploads: true` is set precisely because Vercel
+  caps server-side uploads at that size, but the largest photo uploaded through the deployed
+  admin panel is 2 MB, so the threshold itself is untested.
