@@ -202,6 +202,11 @@ Recorded here rather than left for a reviewer to find on their own:
 
 ## Further reading
 
+- [`docs/evidence/`](docs/evidence/) — screenshots and verifiable output backing the
+  claims above: the successful and declined card runs on both environments, Stripe's
+  webhook delivery log showing a 200, the rollback before and after, the pull-request
+  history, and the live endpoint checks. It also lists, honestly, what was *not*
+  captured.
 - [`docs/go-live-plan.md`](docs/go-live-plan.md) — what switching this shop from
   Stripe sandbox to real, live payments would require. Nothing in it has been
   executed; it's a plan, not a log.
