@@ -96,7 +96,7 @@ use any future expiry date and any three-digit CVC with:
 
 ## How payment actually works
 
-1. The browser sends only a product id to `POST /shop/checkout`.
+1. The browser sends a product id and the chosen size to `POST /shop/checkout`.
 2. The server loads that product from Payload **by id, inside the same request**,
    and reads its price from the database. The client never supplies a price, a
    name, or an amount — a client-supplied price would be a free-shirt button.
