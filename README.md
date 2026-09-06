@@ -202,9 +202,19 @@ Recorded here rather than left for a reviewer to find on their own:
 
 ## Further reading
 
+- [`docs/evidence/`](docs/evidence/) — screenshots and verifiable output backing the
+  claims above: the successful and declined card runs on both environments, Stripe's
+  webhook delivery log showing a 200, the rollback before and after, the pull-request
+  history, and the live endpoint checks. It also lists, honestly, what was *not*
+  captured.
 - [`docs/go-live-plan.md`](docs/go-live-plan.md) — what switching this shop from
   Stripe sandbox to real, live payments would require. Nothing in it has been
   executed; it's a plan, not a log.
+- [`docs/rollback-rehearsal.md`](docs/rollback-rehearsal.md) — a deliberate production
+  break, recovered with Vercel's instant rollback, then properly reverted. Unlike the
+  go-live plan, this one *was* executed against the live site. Three findings, including
+  the two that matter most: CI passed on the broken change, and the rollback fixed the
+  deployment while leaving the repository broken.
 - [`docs/superpowers/specs/2026-09-04-shop-design.md`](docs/superpowers/specs/2026-09-04-shop-design.md) — the design document this shop was built from.
 - [`docs/superpowers/plans/2026-09-04-shop.md`](docs/superpowers/plans/2026-09-04-shop.md) — the task-by-task implementation plan.
 - [`CLAUDE.md`](./CLAUDE.md) — constraints and production rules for anyone (human or agent) working in this repository.
