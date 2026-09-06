@@ -129,7 +129,7 @@ Going live is a keys-and-endpoint change, not a re-architecture:
   and the sandbox preview, a separate production project for real orders. Going
   live does not introduce a third database or touch either existing one.
 - **The Blob stores** — the dev/preview Blob store and the production Blob
-  store — are unaffected; product photos already live in the production store
+  store — are unaffected; product images already live in the production store
   regardless of which Stripe mode is active.
 - **The application code** does not change at all. The checkout and webhook
   handlers already read `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` from

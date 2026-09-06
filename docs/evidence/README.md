@@ -59,7 +59,8 @@ design buys: an order only ever becomes `paid` on a verified webhook, so every o
 route through the system leaves it `pending`, whatever the reason.
 
 Orders are created `pending` when checkout starts. Nothing else in the system can mark one
-paid — `create`, `update` and `delete` are closed to every HTTP path, and the webhook writes
+paid — `create` and `delete` are closed to every HTTP path, and `status` stays closed at field
+level even to the logged-in owner, who may only mark an order shipped. The webhook writes
 through Payload's Local API.
 
 ---

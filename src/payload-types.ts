@@ -156,6 +156,10 @@ export interface Media {
    * Describes the image for screen readers.
    */
   alt: string;
+  /**
+   * How this image was made. AI-generated images are labelled on the public site — the EU AI Act requires disclosing artificially generated image content.
+   */
+  generatedBy: 'ai' | 'photograph' | 'unknown';
   updatedAt: string;
   createdAt: string;
   url?: string | null;
@@ -184,7 +188,7 @@ export interface Product {
    */
   price: number;
   description: string;
-  photo: number | Media;
+  image: number | Media;
   /**
    * Hides the buy button and refuses checkout.
    */
@@ -204,12 +208,29 @@ export interface Order {
   stripeCheckoutSessionId: string;
   stripePaymentIntentId?: string | null;
   email?: string | null;
+  shippingName?: string | null;
+  shippingAddress?: {
+    line1?: string | null;
+    line2?: string | null;
+    city?: string | null;
+    postalCode?: string | null;
+    country?: string | null;
+  };
   status: 'pending' | 'paid' | 'expired';
   /**
    * Total charged, in cents.
    */
   amountTotal: number;
   paidAt?: string | null;
+  /**
+   * When the server received the checkout request carrying the terms consent.
+   */
+  termsAcceptedAt?: string | null;
+  fulfilmentStatus: 'unfulfilled' | 'shipped';
+  /**
+   * Set automatically when marked shipped.
+   */
+  fulfilledAt?: string | null;
   items: {
     product?: (number | null) | Product;
     /**
@@ -220,6 +241,10 @@ export interface Order {
      * The unit price actually charged, in cents.
      */
     unitAmountSnapshot: number;
+    /**
+     * The size chosen at purchase. What the owner prints.
+     */
+    sizeSnapshot?: string | null;
     quantity: number;
     id?: string | null;
   }[];
@@ -336,6 +361,7 @@ export interface UsersSelect<T extends boolean = true> {
  */
 export interface MediaSelect<T extends boolean = true> {
   alt?: T;
+  generatedBy?: T;
   updatedAt?: T;
   createdAt?: T;
   url?: T;
@@ -357,7 +383,7 @@ export interface ProductsSelect<T extends boolean = true> {
   slug?: T;
   price?: T;
   description?: T;
-  photo?: T;
+  image?: T;
   soldOut?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -370,15 +396,29 @@ export interface OrdersSelect<T extends boolean = true> {
   stripeCheckoutSessionId?: T;
   stripePaymentIntentId?: T;
   email?: T;
+  shippingName?: T;
+  shippingAddress?:
+    | T
+    | {
+        line1?: T;
+        line2?: T;
+        city?: T;
+        postalCode?: T;
+        country?: T;
+      };
   status?: T;
   amountTotal?: T;
   paidAt?: T;
+  termsAcceptedAt?: T;
+  fulfilmentStatus?: T;
+  fulfilledAt?: T;
   items?:
     | T
     | {
         product?: T;
         nameSnapshot?: T;
         unitAmountSnapshot?: T;
+        sizeSnapshot?: T;
         quantity?: T;
         id?: T;
       };

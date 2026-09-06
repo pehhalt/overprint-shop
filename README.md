@@ -2,7 +2,7 @@
 
 Overprint is a small print-on-demand t-shirt shop. The owner logs into an admin
 panel and manages a catalogue of a few shirt designs — name, price, description,
-mockup photo. A visitor browses the catalogue, picks a shirt, and pays through
+product image. A visitor browses the catalogue, picks a shirt, and pays through
 Stripe's hosted Checkout running in sandbox; the order is marked paid only when
 Stripe's own signed webhook confirms it.
 
@@ -18,7 +18,7 @@ sold.
 - **Next.js 16** (App Router) — frontend and the two payment route handlers
 - **Payload CMS 3**, self-hosted inside the Next.js app — catalogue and orders
 - **Supabase Postgres** — Payload's database, via the session pooler
-- **Vercel Blob** — product photo storage, through Payload's storage adapter
+- **Vercel Blob** — product image storage, through Payload's storage adapter
 - **Stripe Checkout** (sandbox) — hosted payment page, confirmed by webhook
 - **Vitest** (unit + integration) and **Playwright** (e2e) for tests
 - **GitHub Actions** for CI and for deploys — see [the pipeline](#deployment-pipeline) below
@@ -38,8 +38,10 @@ sold.
 3. **Copy `.env.example` to `.env`** and fill it in:
    - `DATABASE_URI` — the dev project's session-pooler string, as above.
    - `SEED_DEV_PROJECT_REF` — the dev project's ref (the `postgres.XXXX` part of
-     the username in `DATABASE_URI`). `scripts/seed.ts` checks this before it
-     will write anything, so it can positively confirm it's aimed at development.
+     the username in `DATABASE_URI`). Four scripts check this before they will
+     touch anything, so each can positively confirm it's aimed at development:
+     `scripts/seed.ts` and the three [order-data scripts](#order-data-export-erasure-and-retention),
+     which read, redact and delete customer orders.
    - `PAYLOAD_SECRET` — any long random string (`openssl rand -hex 32`).
    - `BLOB_READ_WRITE_TOKEN` — a Vercel Blob read/write token for the dev store.
    - `STRIPE_SECRET_KEY` / `STRIPE_PUBLISHABLE_KEY` — Stripe **test-mode** keys
@@ -83,6 +85,19 @@ removing a collection field requires a real migration. See the **"Schema
 changes: migrate, never push"** section of [`CLAUDE.md`](./CLAUDE.md) for why,
 and for the exact commands.
 
+**Running `payload migrate` locally changes what the sandbox deployment reads.**
+Preview and local development share one development Supabase project (see
+[Environment separation](#environment-separation)), so a migration run on your
+machine applies to the database `overprint-staging.vercel.app` is already
+serving. Adding a column is harmless — the deployed code simply never selects
+it. Renaming or dropping one takes the storefront down with a
+`column ... does not exist` error until the code that matches the new schema is
+deployed; `/admin` keeps answering, because it does not run the catalogue query.
+That window is expected, and it closes when the pull request lands. Don't
+hand-edit the database to close it early. If you need a working sandbox in the
+meantime, deploy the branch to its own preview URL with `vercel deploy` and
+leave the staging alias where it is.
+
 ## The two-card test
 
 Manual, human-visible proof that the payment logic actually gates on Stripe's
@@ -96,7 +111,8 @@ use any future expiry date and any three-digit CVC with:
 
 ## How payment actually works
 
-1. The browser sends only a product id to `POST /shop/checkout`.
+1. The browser sends a product id, the chosen size, and terms acceptance to
+   `POST /shop/checkout`.
 2. The server loads that product from Payload **by id, inside the same request**,
    and reads its price from the database. The client never supplies a price, a
    name, or an amount — a client-supplied price would be a free-shirt button.
@@ -117,6 +133,108 @@ use any future expiry date and any three-digit CVC with:
 
 Both handlers live outside `/api` (`/shop/checkout`, `/shop/stripe-webhook`)
 because Payload mounts its own REST API at `/api/[...slug]`.
+
+## Sizes, shipping, and consent
+
+- **Size.** `SIZES` (`src/lib/constants.ts`) is `['S', 'M', 'L', 'XL']`, a
+  catalogue-wide constant — every shirt comes in all four sizes, so this is
+  deliberately not a per-product field, the same way `CURRENCY` isn't.
+  Default `M`. The server checks the submitted size against this list with an
+  exact string match (no trimming, no case-folding) and rejects anything else
+  with a `400`. The size actually bought is snapshotted onto the order line
+  as `sizeSnapshot`.
+- **Shipping address.** Collected by Stripe itself
+  (`shipping_address_collection`, Germany only) and read back from
+  `session.collected_information.shipping_details` in the webhook handler.
+  This is a trap: Stripe moved shipping details there from a top-level field
+  in its Basil API version, and this project is pinned to a later version —
+  the old top-level path silently resolves to `undefined` rather than
+  erroring, so following older documentation here would compile, run, and
+  collect nothing.
+- **Terms consent.** Collected on **our own site**, not by Stripe: a required
+  checkbox on the product page linking to [`/legal`](#the-legal-page), sent
+  with the checkout request and re-checked server-side with a strict
+  `=== true` identity test (a truthy value like the string `"true"` doesn't
+  count). Accepted consent is timestamped as `orders.termsAcceptedAt`. This
+  runs on our own page rather than through Stripe's `consent_collection`
+  because that feature requires a Terms-of-Service URL set in the Stripe
+  dashboard, which cannot be set without activating the account — forbidden
+  by `CLAUDE.md`.
+
+## Fulfilment
+
+An admin marks an order shipped from its edit page in `/admin`. `Orders`'
+collection-level `update` is open to any logged-in admin, but only
+`fulfilmentStatus` is actually writable — the other eleven fields
+(`stripeCheckoutSessionId`, `stripePaymentIntentId`, `email`, `shippingName`,
+`shippingAddress`, `status`, `amountTotal`, `paidAt`, `termsAcceptedAt`,
+`fulfilledAt`, `items`) each carry field-level `access: { update: () =>
+false }`, so a browser can change the fulfilment status and nothing else.
+`fulfilledAt` is set by a `beforeChange` hook when `fulfilmentStatus` flips to
+`shipped`, and cleared if it flips back — never set by hand.
+
+## The legal page
+
+`/legal` covers what the shop is, who runs it, the AI-image disclosure, and a
+privacy notice (what's collected, retention, and how to exercise access or
+erasure rights). It's linked from a footer on every storefront page
+(`SiteFooter.tsx`) and nowhere in `/admin` — the two audiences don't share
+chrome.
+
+### Required after this deploys: label the production images
+
+`/legal` says that any AI-generated image is labelled as such on its product
+page. That label is drawn from each image's **Generated By** field, which
+defaults to **Unknown** — and every image already in production was uploaded
+before the field existed, so all four currently read **Unknown** and no label
+appears. Until the owner does the following, the legal page's claim is not true
+on the live site. Nothing scripts this on purpose: stating how an image was made
+is the owner's assertion, not something code should assume.
+
+1. Go to **https://overprint-shop.vercel.app/admin/collections/media** and log in.
+2. You should see a list of four images. Click the first one.
+3. Scroll to the field labelled **Generated By**. It will say **Unknown**.
+4. Click it and choose **AI-generated**.
+5. Click the **Save** button (top right of the page).
+6. Click **Media** in the left-hand menu to get back to the list, and repeat
+   steps 2–5 for each of the other three images.
+7. Check it worked: open **https://overprint-shop.vercel.app**, click into any
+   product, and confirm the words *AI-generated image* now appear underneath
+   the picture.
+
+## Order data: export, erasure, and retention
+
+Three scripts under `scripts/`. Run `export:order` through its npm script and
+not a bare `tsx` invocation — it's the one with a stdout contract to protect
+(see `PAYLOAD_LOG_TO_STDERR` below); the other two only log for a human to read:
+
+| Script | Does |
+|---|---|
+| `npm run export:order -- --email <e>` or `-- --session <id>` | Writes every matching order to stdout as JSON. |
+| `npm run erase:order -- --email <e> [--confirm]` (or `--session <id>`) | Redacts every matching order's identity fields. |
+| `npm run prune:orders [-- --confirm]` | Applies retention: deletes stale unpaid orders, redacts stale paid ones. |
+
+`--email` / `--session` pick the target order(s) for `export:order` and
+`erase:order`. `erase:order` and `prune:orders` write nothing without an
+explicit `--confirm` — without it, each prints its plan (which orders, what
+it would do) and exits. All three refuse to run with `NODE_ENV=production`,
+or when `DATABASE_URI` can't be confirmed as the development project — a
+project-ref guard shaped like `scripts/seed.ts`'s, but checking `NODE_ENV`
+first, unconditionally, so no override can rescue a production target. The
+project-ref half is the half that does the work, and
+[`ORDER_ADMIN_ALLOW_UNSAFE=1`](#known-limitations) switches it off.
+
+**Retention:** unpaid/expired orders are deleted after 30 days; paid orders
+are kept 2 years, then redacted (identity fields cleared, amount and date
+kept as a commercial record). Both are measured from `createdAt`. This is
+enforced manually — `prune:orders` only prunes when an operator runs it;
+nothing happens on a schedule.
+
+**`PAYLOAD_LOG_TO_STDERR`**, set only by these three npm scripts
+(`src/payload.config.ts`), redirects Payload's own logger to stderr so it
+can't interleave with — and corrupt — the JSON `export:order` writes to
+stdout. Running `export:order` directly with `tsx` skips this and produces
+JSON with a log line in the middle of it.
 
 ## Deployment pipeline
 
@@ -156,7 +274,8 @@ environment.
 | Variable | Preview | Production |
 |---|---|---|
 | `DATABASE_URI` | Dev Supabase project, session pooler | **Separate** prod Supabase project, session pooler |
-| `SEED_DEV_PROJECT_REF` | Dev project's ref, so `npm run seed` can confirm it's pointed at dev | Not set — seeding is a local/dev-only tool, never run against Production |
+| `SEED_DEV_PROJECT_REF` | Dev project's ref, so `seed`, `export:order`, `erase:order` and `prune:orders` can each confirm they're pointed at dev | Not set — all four are local/dev-only tools, never run against Production |
+| `ORDER_ADMIN_ALLOW_UNSAFE` | Not set. Setting it to `1` switches off that project-ref check for the three order scripts — a human override, see [Known limitations](#known-limitations) | Not set, and must never be |
 | `PAYLOAD_SECRET` | Its own value | A different value from Preview |
 | `BLOB_READ_WRITE_TOKEN` | Token for the dev Blob store | Token for a **separate** prod Blob store |
 | `STRIPE_SECRET_KEY` | `sk_test_…` (sandbox) | `sk_test_…` (sandbox) — see the [go-live plan](docs/go-live-plan.md) for the switch to live |
@@ -191,6 +310,17 @@ Recorded here rather than left for a reviewer to find on their own:
   or an `.env` file would bypass the production guard as well as the
   project-ref guard — the override is meant for a human to reach for
   deliberately, not to be a value that can be left lying around safely.
+- **`ORDER_ADMIN_ALLOW_UNSAFE=1` leaves the order scripts with one real guard.**
+  It switches off the project-ref check in `src/lib/order-admin.ts` for
+  `export:order`, `erase:order` and `prune:orders` — the scripts that export,
+  redact and delete customer orders. Unlike `SEED_ALLOW_UNSAFE` it is read
+  *after* the `NODE_ENV === 'production'` check, so no value of it can rescue a
+  production target. But that surviving check is close to inert in practice:
+  `tsx` sets no `NODE_ENV`, and neither do these three npm scripts, so in a real
+  invocation `NODE_ENV` is `undefined` and the project-ref comparison is the
+  only guard actually doing work. Switching it off leaves nothing. Like the seed
+  override, it is for a human to reach for deliberately, never a value to leave
+  set in a shell or an `.env` file.
 - **`npm test` can exhaust Supabase's 15-connection session-pool limit** when
   its `tests/int` integration files run against a live database in parallel.
   It passes reliably with `npm test -- --no-file-parallelism`. CI is

@@ -19,7 +19,7 @@ export function DemoBanner() {
       className="border-b-4 border-amber-500 bg-amber-300 px-4 py-3 text-center text-sm font-semibold text-amber-950"
     >
       This is a demonstration shop. Payments run through Stripe in test mode only, and no goods
-      are ever shipped. Please do not enter real card details.
+      are ever shipped. Please do not enter real card details or a real address.
     </div>
   )
 }

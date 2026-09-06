@@ -4,7 +4,7 @@
  * Idempotent: re-running this script never creates duplicates. It:
  *   1. Creates a development admin user (dev@overprint.local) if one doesn't exist yet.
  *   2. Creates three t-shirt products, each with a locally-generated placeholder
- *      photo uploaded through Payload's Local API (which round-trips through the
+ *      image uploaded through Payload's Local API (which round-trips through the
  *      Vercel Blob storage adapter configured in payload.config.ts).
  *
  * Guarded: refuses to run unless the target database can be positively confirmed to be
@@ -17,35 +17,7 @@ import 'dotenv/config'
 import sharp from 'sharp'
 import { getPayload } from 'payload'
 import config from '../src/payload.config.js'
-
-/**
- * Extracts a Supabase project ref from a Postgres connection string, supporting both
- * connection shapes used in this project:
- *   - Pooler (session/transaction): postgres.PROJECTREF@aws-...pooler.supabase.com
- *   - Direct connection:            postgres@db.PROJECTREF.supabase.co
- * Returns null when the URI isn't a recognisable Supabase connection string — that is
- * treated as "cannot determine", never as "safe".
- */
-function extractSupabaseProjectRef(databaseUri: string): string | null {
-  let parsed: URL
-  try {
-    parsed = new URL(databaseUri)
-  } catch {
-    return null
-  }
-
-  const username = decodeURIComponent(parsed.username)
-  if (username.startsWith('postgres.')) {
-    return username.slice('postgres.'.length) || null
-  }
-
-  const directMatch = /^db\.([^.]+)\.supabase\.co$/.exec(parsed.hostname)
-  if (directMatch) {
-    return directMatch[1]
-  }
-
-  return null
-}
+import { extractSupabaseProjectRef } from '../src/lib/supabase-project-ref.js'
 
 function refuseToSeed(reason: string): never {
   console.error(
@@ -131,7 +103,7 @@ type ProductSeed = {
   /** integer cents */
   price: number
   description: string
-  /** solid background colour used to generate the placeholder photo */
+  /** solid background colour used to generate the placeholder image */
   color: { r: number; g: number; b: number }
   alt: string
 }
@@ -144,7 +116,7 @@ const PRODUCTS: ProductSeed[] = [
     description:
       'A classic crew-neck in solid black, printed with a minimal line-art design. Heavyweight 100% combed cotton that holds its shape wash after wash.',
     color: { r: 17, g: 17, b: 20 },
-    alt: 'Front view of the Midnight Tee, a solid black crew-neck t-shirt',
+    alt: 'The Midnight Tee, a solid black crew-neck t-shirt',
   },
   {
     name: 'Coral Sunset Tee',
@@ -153,7 +125,7 @@ const PRODUCTS: ProductSeed[] = [
     description:
       'A warm coral tee with an oversized graphic print inspired by summer evenings. Relaxed unisex fit in soft ring-spun cotton.',
     color: { r: 232, g: 108, b: 85 },
-    alt: 'Front view of the Coral Sunset Tee, a coral-orange oversized-fit t-shirt',
+    alt: 'The Coral Sunset Tee, a coral-orange oversized-fit t-shirt',
   },
   {
     name: 'Forest Ridge Tee',
@@ -162,11 +134,11 @@ const PRODUCTS: ProductSeed[] = [
     description:
       'A deep forest-green tee featuring a small embroidered mountain ridge logo on the chest. Garment-dyed for a soft, lived-in feel from the first wear.',
     color: { r: 43, g: 74, b: 51 },
-    alt: 'Front view of the Forest Ridge Tee, a forest-green t-shirt with a small chest logo',
+    alt: 'The Forest Ridge Tee, a forest-green t-shirt with a small chest logo',
   },
 ]
 
-async function generatePhotoBuffer(color: { r: number; g: number; b: number }): Promise<Buffer> {
+async function generateImageBuffer(color: { r: number; g: number; b: number }): Promise<Buffer> {
   return sharp({
     create: {
       width: 1200,
@@ -217,7 +189,7 @@ async function main() {
     console.log(`Development admin user already exists: ${DEV_ADMIN_EMAIL}`)
   }
 
-  // --- 2 & 3. Products with generated photos ---
+  // --- 2 & 3. Products with generated images ---
   for (const product of PRODUCTS) {
     const existing = await payload.find({
       collection: 'products',
@@ -230,12 +202,13 @@ async function main() {
       continue
     }
 
-    const buffer = await generatePhotoBuffer(product.color)
+    const buffer = await generateImageBuffer(product.color)
     const filename = `${product.slug}.png`
 
     const media = await payload.create({
       collection: 'media',
-      data: { alt: product.alt },
+      // 'photograph', not 'ai': these are sharp-rendered solid colours, not model output.
+      data: { alt: product.alt, generatedBy: 'photograph' },
       file: {
         data: buffer,
         mimetype: 'image/png',
@@ -251,13 +224,13 @@ async function main() {
         slug: product.slug,
         price: product.price,
         description: product.description,
-        photo: media.id,
+        image: media.id,
         soldOut: false,
       },
     })
 
     console.log(
-      `Created product: ${created.name} (slug=${created.slug}, price=${created.price}c, photo url=${media.url})`,
+      `Created product: ${created.name} (slug=${created.slug}, price=${created.price}c, image url=${media.url})`,
     )
   }
 

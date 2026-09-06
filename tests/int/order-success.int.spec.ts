@@ -62,6 +62,7 @@ function fixtureOrderData(
   return {
     stripeCheckoutSessionId: sessionId,
     status,
+    fulfilmentStatus: 'unfulfilled' as const,
     email: 'buyer@example.com',
     amountTotal: SNAPSHOT_UNIT_AMOUNT * 2,
     paidAt: status === 'paid' ? new Date().toISOString() : null,
@@ -70,6 +71,7 @@ function fixtureOrderData(
       {
         nameSnapshot: SNAPSHOT_NAME,
         unitAmountSnapshot: SNAPSHOT_UNIT_AMOUNT,
+        sizeSnapshot: 'M',
         quantity: 2,
       },
     ],
