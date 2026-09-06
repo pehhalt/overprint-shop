@@ -128,8 +128,14 @@ export async function findOrders({
  * `items` (including `sizeSnapshot`) and `termsAcceptedAt` are a commercial and consent
  * record with their own retention basis and are left untouched. Only identity — `email`,
  * `shippingName`, and the whole `shippingAddress` group, cleared as a unit — is wiped.
- * That satisfies Art. 17: the row survives as a sale record, but is no longer personal
- * data.
+ * That is a partial erasure, not a complete one, and the docblock used to claim
+ * otherwise. `stripeCheckoutSessionId` and `stripePaymentIntentId` survive, and either
+ * can be handed to Stripe to recover the customer's name, email and address — so the
+ * redacted row is still personal data in GDPR's sense, and Art. 17 is not fully
+ * satisfied. The published notice at /legal says so plainly rather than implying more.
+ * Clearing those two identifiers here would make the stronger claim true;
+ * `stripeCheckoutSessionId` is required and unique, so it needs a tombstone value rather
+ * than a null.
  *
  * `assertSafeTarget()` runs first, as this function's first statement — not just at the
  * call sites in Task 11's scripts — so erasure refuses regardless of whether a caller
