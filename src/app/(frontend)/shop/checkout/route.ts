@@ -11,9 +11,11 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as {
     productId?: unknown
     size?: unknown
+    acceptedTerms?: unknown
   } | null
   const productId = body?.productId
   const size = body?.size
+  const acceptedTerms = body?.acceptedTerms
 
   if (!productId || typeof productId !== 'string') {
     return NextResponse.json({ error: 'productId is required' }, { status: 400 })
@@ -21,6 +23,15 @@ export async function POST(req: Request) {
 
   if (!isValidSize(size)) {
     return NextResponse.json({ error: 'A valid size is required' }, { status: 400 })
+  }
+
+  // Strict identity, not truthiness: `acceptedTerms` is unknown from req.json(),
+  // and the string 'true' must not count as consent.
+  if (acceptedTerms !== true) {
+    return NextResponse.json(
+      { error: 'You must accept the terms before checking out' },
+      { status: 400 },
+    )
   }
 
   const payload = await getPayload({ config: configPromise })
@@ -56,6 +67,14 @@ export async function POST(req: Request) {
       // (confirmed against Stripe's API directly), a failure mode no test
       // here can catch because Stripe itself is mocked.
       managed_payments: { enabled: false },
+      shipping_address_collection: { allowed_countries: ['DE'] },
+      // Card only. Not because Klarna or Amazon Pay would break anything — every method
+      // produces the same paid webhook — but Apple Pay needs domain verification and fails
+      // confusingly without it, and the graded demonstration is the two-card test.
+      payment_method_types: ['card'],
+      // Stripe's consent_collection needs a dashboard ToS URL this account cannot set
+      // without activating, which CLAUDE.md forbids. Sending it 400s the whole session.
+      // Consent is collected on our own page instead (the /legal checkbox). Do not "restore" this.
       line_items: [
         {
           quantity: 1,
@@ -92,6 +111,7 @@ export async function POST(req: Request) {
         stripeCheckoutSessionId: session.id,
         status: 'pending',
         amountTotal: product.price,
+        termsAcceptedAt: new Date().toISOString(),
         items: [
           {
             product: product.id,

@@ -50,6 +50,8 @@ const SESSION_ID_ORDER_TEST = 'task10-fixture-cs_test_writes_pending_order'
 const SESSION_ID_MANAGED_PAYMENTS_TEST = 'task10-fixture-cs_test_managed_payments_disabled'
 const SESSION_ID_SIZE_TEST = 'task10-fixture-cs_test_size_in_line_item'
 const SESSION_ID_SIZE_SNAPSHOT_TEST = 'task10-fixture-cs_test_size_snapshot'
+const SESSION_ID_COLLECTION_TEST = 'task10-fixture-cs_test_address_collection'
+const SESSION_ID_TERMS_TEST = 'task10-fixture-cs_test_terms_accepted_at'
 
 function request(body: unknown) {
   return new Request('http://localhost:3000/shop/checkout', {
@@ -135,6 +137,8 @@ describe('POST /shop/checkout (Task 10)', () => {
             SESSION_ID_MANAGED_PAYMENTS_TEST,
             SESSION_ID_SIZE_TEST,
             SESSION_ID_SIZE_SNAPSHOT_TEST,
+            SESSION_ID_COLLECTION_TEST,
+            SESSION_ID_TERMS_TEST,
           ],
         },
       },
@@ -167,7 +171,7 @@ describe('POST /shop/checkout (Task 10)', () => {
 
     // The request body lies about the price. The handler must ignore it.
     const response = await POST(
-      request({ productId: String(availableProductId), size: 'M', price: 1 }),
+      request({ productId: String(availableProductId), size: 'M', price: 1, acceptedTerms: true }),
     )
 
     expect(response.status).toBe(200)
@@ -183,7 +187,9 @@ describe('POST /shop/checkout (Task 10)', () => {
       url: 'https://checkout.stripe.com/y',
     })
 
-    const response = await POST(request({ productId: String(availableProductId), size: 'M' }))
+    const response = await POST(
+      request({ productId: String(availableProductId), size: 'M', acceptedTerms: true }),
+    )
     expect(response.status).toBe(200)
 
     const found = await payload.find({
@@ -207,7 +213,9 @@ describe('POST /shop/checkout (Task 10)', () => {
       overrideAccess: true,
     })
 
-    const response = await POST(request({ productId: String(soldOutProductId), size: 'M' }))
+    const response = await POST(
+      request({ productId: String(soldOutProductId), size: 'M', acceptedTerms: true }),
+    )
     const data = await response.json()
 
     expect(response.status).toBe(409)
@@ -235,7 +243,7 @@ describe('POST /shop/checkout (Task 10)', () => {
       url: 'https://checkout.stripe.com/managed-payments',
     })
 
-    await POST(request({ productId: String(availableProductId), size: 'M' }))
+    await POST(request({ productId: String(availableProductId), size: 'M', acceptedTerms: true }))
 
     expect(sessionsCreate).toHaveBeenCalledOnce()
     const args = sessionsCreate.mock.calls[0][0]
@@ -252,7 +260,9 @@ describe('POST /shop/checkout (Task 10)', () => {
   })
 
   it('rejects a request with no size', async () => {
-    const response = await POST(request({ productId: String(availableProductId) }))
+    const response = await POST(
+      request({ productId: String(availableProductId), acceptedTerms: true }),
+    )
     expect(response.status).toBe(400)
     expect(sessionsCreate).not.toHaveBeenCalled()
   })
@@ -265,7 +275,9 @@ describe('POST /shop/checkout (Task 10)', () => {
     })
 
     for (const bad of ['XXL', '<script>', '', 'm ', 's', 42, null]) {
-      const response = await POST(request({ productId: String(availableProductId), size: bad }))
+      const response = await POST(
+        request({ productId: String(availableProductId), size: bad, acceptedTerms: true }),
+      )
       expect(response.status, `size ${JSON.stringify(bad)} should be refused`).toBe(400)
     }
     expect(sessionsCreate).not.toHaveBeenCalled()
@@ -284,7 +296,7 @@ describe('POST /shop/checkout (Task 10)', () => {
       url: 'https://checkout.stripe.com/size',
     })
 
-    await POST(request({ productId: String(availableProductId), size: 'L' }))
+    await POST(request({ productId: String(availableProductId), size: 'L', acceptedTerms: true }))
 
     const args = sessionsCreate.mock.calls[0][0]
     expect(args.line_items[0].price_data.product_data.name).toBe(`${AVAILABLE_NAME} — L`)
@@ -296,7 +308,7 @@ describe('POST /shop/checkout (Task 10)', () => {
       url: 'https://checkout.stripe.com/snapshot',
     })
 
-    await POST(request({ productId: String(availableProductId), size: 'XL' }))
+    await POST(request({ productId: String(availableProductId), size: 'XL', acceptedTerms: true }))
 
     const found = await payload.find({
       collection: 'orders',
@@ -316,7 +328,9 @@ describe('POST /shop/checkout (Task 10)', () => {
       overrideAccess: true,
     })
 
-    const response = await POST(request({ productId: String(availableProductId), size: 'M' }))
+    const response = await POST(
+      request({ productId: String(availableProductId), size: 'M', acceptedTerms: true }),
+    )
     // A non-JSON 500 is exactly the bug this test guards against — the
     // response must always be parseable JSON, whatever the status.
     const data = await response.json()
@@ -346,7 +360,9 @@ describe('POST /shop/checkout (Task 10)', () => {
       .mockRejectedValueOnce(new Error('DB write failed (simulated)'))
 
     try {
-      const response = await POST(request({ productId: String(availableProductId), size: 'M' }))
+      const response = await POST(
+        request({ productId: String(availableProductId), size: 'M', acceptedTerms: true }),
+      )
       const data = await response.json()
 
       expect(response.status).toBe(502)
@@ -367,5 +383,65 @@ describe('POST /shop/checkout (Task 10)', () => {
     } finally {
       createSpy.mockRestore()
     }
+  })
+
+  it('collects a German shipping address and card only, and asks Stripe for no consent', async () => {
+    sessionsCreate.mockResolvedValue({
+      id: SESSION_ID_COLLECTION_TEST,
+      url: 'https://checkout.stripe.com/collect',
+    })
+
+    await POST(request({ productId: String(availableProductId), size: 'M', acceptedTerms: true }))
+
+    const args = sessionsCreate.mock.calls[0][0]
+    expect(args.shipping_address_collection).toEqual({ allowed_countries: ['DE'] })
+    expect(args.payment_method_types).toEqual(['card'])
+    // Stripe's consent_collection needs a dashboard ToS URL this account cannot set
+    // without activating, which CLAUDE.md forbids. Sending it 400s the whole session.
+    // Consent is collected on our own page instead. Do not "restore" this.
+    expect(args.consent_collection).toBeUndefined()
+  })
+
+  it('refuses checkout when the terms were not accepted, creating no session and no order', async () => {
+    const before = await payload.find({
+      collection: 'orders',
+      where: { 'items.product': { equals: availableProductId } },
+      overrideAccess: true,
+    })
+
+    for (const bad of [undefined, false, 'true', 1, null, 'yes']) {
+      const response = await POST(
+        request({ productId: String(availableProductId), size: 'M', acceptedTerms: bad }),
+      )
+      expect(response.status, `acceptedTerms ${JSON.stringify(bad)} should be refused`).toBe(400)
+    }
+    expect(sessionsCreate).not.toHaveBeenCalled()
+
+    const after = await payload.find({
+      collection: 'orders',
+      where: { 'items.product': { equals: availableProductId } },
+      overrideAccess: true,
+    })
+    expect(after.totalDocs).toBe(before.totalDocs)
+  })
+
+  it('records when the terms were accepted', async () => {
+    sessionsCreate.mockResolvedValue({
+      id: SESSION_ID_TERMS_TEST,
+      url: 'https://checkout.stripe.com/terms',
+    })
+
+    const before = Date.now()
+    await POST(request({ productId: String(availableProductId), size: 'M', acceptedTerms: true }))
+
+    const found = await payload.find({
+      collection: 'orders',
+      where: { stripeCheckoutSessionId: { equals: SESSION_ID_TERMS_TEST } },
+      overrideAccess: true,
+    })
+    expect(found.totalDocs).toBe(1)
+    const acceptedAt = new Date(found.docs[0].termsAcceptedAt!).getTime()
+    expect(acceptedAt).toBeGreaterThanOrEqual(before - 1000)
+    expect(acceptedAt).toBeLessThanOrEqual(Date.now() + 1000)
   })
 })

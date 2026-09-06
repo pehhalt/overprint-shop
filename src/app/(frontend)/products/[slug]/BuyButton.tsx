@@ -7,6 +7,7 @@ export function BuyButton({ productId, soldOut }: { productId: string; soldOut: 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [size, setSize] = useState<Size>(SIZE_DEFAULT)
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
 
   if (soldOut) {
     return <p className="mt-6 rounded border px-4 py-2 text-center font-medium">Sold out</p>
@@ -24,7 +25,7 @@ export function BuyButton({ productId, soldOut }: { productId: string; soldOut: 
       const response = await fetch('/shop/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId, size }),
+        body: JSON.stringify({ productId, size, acceptedTerms }),
       })
 
       const data = await response.json().catch(() => null)
@@ -65,9 +66,20 @@ export function BuyButton({ productId, soldOut }: { productId: string; soldOut: 
           </button>
         ))}
       </div>
+      <label className="mb-3 flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={acceptedTerms}
+          onChange={(e) => setAcceptedTerms(e.target.checked)}
+        />
+        I have read and accept the{' '}
+        <a href="/legal" target="_blank" rel="noreferrer" className="underline">
+          terms and privacy notice
+        </a>
+      </label>
       <button
         onClick={buy}
-        disabled={busy}
+        disabled={busy || !acceptedTerms}
         className="w-full rounded bg-black px-4 py-3 font-medium text-white disabled:opacity-50"
       >
         {busy ? 'Taking you to checkout…' : 'Buy this shirt'}

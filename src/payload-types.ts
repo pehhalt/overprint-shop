@@ -210,6 +210,10 @@ export interface Order {
    */
   amountTotal: number;
   paidAt?: string | null;
+  /**
+   * When the customer ticked the terms box on the product page, before being sent to Stripe.
+   */
+  termsAcceptedAt?: string | null;
   items: {
     product?: (number | null) | Product;
     /**
@@ -377,6 +381,7 @@ export interface OrdersSelect<T extends boolean = true> {
   status?: T;
   amountTotal?: T;
   paidAt?: T;
+  termsAcceptedAt?: T;
   items?:
     | T
     | {

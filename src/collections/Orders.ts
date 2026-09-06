@@ -48,6 +48,15 @@ export const Orders: CollectionConfig = {
     },
     { name: 'paidAt', type: 'date' },
     {
+      name: 'termsAcceptedAt',
+      type: 'date',
+      admin: {
+        readOnly: true,
+        description:
+          'When the customer ticked the terms box on the product page, before being sent to Stripe.',
+      },
+    },
+    {
       name: 'items',
       type: 'array',
       required: true,
