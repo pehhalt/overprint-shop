@@ -2,16 +2,46 @@ import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import Link from 'next/link'
 import { formatPrice } from '@/lib/constants'
-import { findOrderBySessionId } from '@/lib/orders'
+import { findOrderBySessionId, isOrderConfirmationExpired } from '@/lib/orders'
 
 // Without this the page could be served from cache and show a stale order
 // state (e.g. "confirming" long after the webhook actually landed).
 export const dynamic = 'force-dynamic'
 
+// This URL carries no authentication of its own — anyone holding the
+// `session_id` can load it — so it must never be indexed. A crawled,
+// cached, or search-engine-surfaced copy is exactly how a leaked link (a
+// screenshot, a referrer header, a support email) turns into a durable
+// exposure instead of a momentary one.
+export const metadata = {
+  robots: { index: false, follow: false },
+}
+
 function NoOrder({ heading }: { heading: string }) {
   return (
     <main className="mx-auto max-w-xl p-8">
       <h1 className="text-2xl font-bold">{heading}</h1>
+      <Link href="/" className="mt-4 inline-block underline">
+        Back to the shop
+      </Link>
+    </main>
+  )
+}
+
+// Rendered both when `session_id` matches no order at all, and when it
+// matches a real order that is older than the confirmation window. Those two
+// cases MUST look identical: this page has no authentication, so if "unknown
+// id" and "real id, but old" produced different output, the page itself
+// could be used to test whether a given session id belongs to a real order.
+function ExpiredLink() {
+  return (
+    <main className="mx-auto max-w-xl p-8">
+      <h1 className="text-2xl font-bold">This confirmation link has expired</h1>
+      <p className="mt-2 text-neutral-600">
+        Confirmation links are only valid for 30 minutes after checkout, to keep order details
+        from staying accessible indefinitely. Please start again from the shop if you still need
+        to make a purchase.
+      </p>
       <Link href="/" className="mt-4 inline-block underline">
         Back to the shop
       </Link>
@@ -34,7 +64,11 @@ export default async function SuccessPage({
   const order = await findOrderBySessionId(payload, sessionId)
 
   if (!order) {
-    return <NoOrder heading="We could not find that order" />
+    return <ExpiredLink />
+  }
+
+  if (isOrderConfirmationExpired(order)) {
+    return <ExpiredLink />
   }
 
   // This page only reports what the database already says. It never decides

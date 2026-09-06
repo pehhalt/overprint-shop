@@ -113,7 +113,17 @@ function assertSafeToSeed(): void {
 }
 
 const DEV_ADMIN_EMAIL = 'dev@overprint.local'
-const DEV_ADMIN_FALLBACK_PASSWORD = 'dev-only-CHANGE-ME-123!'
+
+// There is deliberately NO fallback password here.
+//
+// There used to be one, as a convenience. It was a real vulnerability: this
+// repository is public, the preview deployment serves the development database
+// over the open internet at /admin, and anyone who read this file could sign
+// into it. A default credential in a public repository is a published
+// credential.
+//
+// SEED_ADMIN_PASSWORD is required. Generate one with:
+//   node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
 
 type ProductSeed = {
   name: string
@@ -183,16 +193,23 @@ async function main() {
 
   if (existingAdmins.totalDocs === 0) {
     const password = process.env.SEED_ADMIN_PASSWORD
-    if (!password) {
-      console.warn(
-        `SEED_ADMIN_PASSWORD not set — using the fallback development password (${DEV_ADMIN_FALLBACK_PASSWORD}). Set SEED_ADMIN_PASSWORD in .env for a real value.`,
+    if (!password || password.length < 16) {
+      throw new Error(
+        'SEED_ADMIN_PASSWORD is required and must be at least 16 characters.\n\n' +
+          'This account can sign into the admin panel of whichever database\n' +
+          'DATABASE_URI points at, and the preview deployment serves that database\n' +
+          'over the public internet. Refusing to create it with a weak or absent\n' +
+          'password.\n\n' +
+          'Generate one with:\n' +
+          '  node -e "console.log(require(\'crypto\').randomBytes(24).toString(\'base64url\'))"\n' +
+          'then set SEED_ADMIN_PASSWORD in .env',
       )
     }
     await payload.create({
       collection: 'users',
       data: {
         email: DEV_ADMIN_EMAIL,
-        password: password || DEV_ADMIN_FALLBACK_PASSWORD,
+        password,
       },
     })
     console.log(`Created development admin user: ${DEV_ADMIN_EMAIL}`)

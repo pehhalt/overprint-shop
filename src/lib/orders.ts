@@ -27,3 +27,32 @@ export async function findOrderBySessionId(
 
   return docs[0] ?? null
 }
+
+/**
+ * How long the `/order/success` confirmation page will disclose an order's
+ * contents after it was created.
+ *
+ * This page has no authentication of its own — holding the `session_id` is
+ * the only thing that "authorizes" a viewer. Without an expiry, any order
+ * ever created renders forever, so a session id that leaks once (browser
+ * history, a screenshot, a referrer header, a support email) stays a live
+ * exposure indefinitely. 30 minutes is generous enough to absorb a slow
+ * Stripe webhook and a customer refreshing the page, while being short
+ * enough that a link which leaks later is normally already dead.
+ */
+export const ORDER_CONFIRMATION_WINDOW_MS = 30 * 60 * 1000
+
+/**
+ * Whether `/order/success` should refuse to disclose this order's contents
+ * because it is older than {@link ORDER_CONFIRMATION_WINDOW_MS}.
+ *
+ * `now` is injectable so tests don't have to wait 30 real minutes to prove
+ * the expiry works — see `tests/int/order-success.int.spec.ts`.
+ */
+export function isOrderConfirmationExpired(
+  order: Pick<Order, 'createdAt'>,
+  now: Date = new Date(),
+): boolean {
+  const createdAt = new Date(order.createdAt).getTime()
+  return now.getTime() - createdAt > ORDER_CONFIRMATION_WINDOW_MS
+}
