@@ -262,12 +262,27 @@ Sections, in this order:
 2. **Who runs it.** The owner's name and a working contact email. No postal address, per
    §2.
 
-   **This is an input the implementation cannot invent.** The owner must supply the name and
-   the email address to publish. It should be an address they are willing to have on a
-   public page indefinitely — a role address rather than a primary personal one is worth
-   considering, since it will be scraped. Implementation stops and asks rather than
-   guessing or using a placeholder; a legal page with a fake contact is worse than no legal
-   page, because it claims a route to redress that does not exist.
+   **Decided: a dedicated, genuinely working email address**, created for this shop alone
+   and publishable indefinitely. Not the owner's primary mailbox, so it can be abandoned;
+   not a placeholder, because it has to actually work.
+
+   The reasoning, recorded because the temptation to use a fake one is real. A test card
+   number is safe because it is non-functional *in a system that recognises it as a test*.
+   A contact address is a promise to a person. The privacy section's entire purpose is
+   "here is how to exercise your rights" — a fake address turns that into decoration, and
+   real personal data has already passed through this system.
+
+   Two specific prohibitions:
+   - **Never a placeholder on a real domain.** `mustermann.de`, `beispiel.de` and similar
+     are registered to real people; publishing one directs GDPR complaints at an
+     uninvolved stranger, which is worse than publishing nothing. If a placeholder were
+     ever needed, only RFC 2606 reserved domains (`example.com`) are safe.
+   - **Never a fabricated address that looks real.**
+
+   **This is an input the implementation cannot invent.** The owner supplies the address and
+   the name form to publish. Implementation stops and asks rather than guessing. The name
+   need not be a full legal name — this is not an Impressum (§2); something identifying the
+   person and the context, such as a first name plus "student project", is sufficient.
 3. **AI-generated images.** See §9.
 4. **Privacy.** Covering, in plain language: what is collected (email, name, shipping
    address, order contents — and card details by Stripe, never by us); why; the lawful
