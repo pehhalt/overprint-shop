@@ -64,7 +64,8 @@ demonstration shop cannot honestly answer.
 
 ### Out
 
-- Sizes, variants, stock, a multi-item cart
+- Product **variants**, stock, a multi-item cart. Sizes are in scope (§4a), but as a chosen
+  attribute of a single-item purchase, not as a variant model with its own prices or stock
 - Shipping rates, VAT, tax calculation
 - Order confirmation emails
 - Customer accounts
@@ -78,7 +79,30 @@ demonstration shop cannot honestly answer.
 ```ts
 shipping_address_collection: { allowed_countries: ['DE'] },
 consent_collection: { terms_of_service: 'required' },
+payment_method_types: ['card'],
 ```
+
+### Card only
+
+`payment_method_types: ['card']` replaces Stripe's dynamic payment methods, which currently
+offer Klarna, Amazon Pay, Link and Apple Pay above the card form.
+
+Not because they would break anything — they would not. Every method produces the same
+`checkout.session.completed` with `payment_status: 'paid'`, and the webhook neither knows
+nor cares which was used. The reasons are narrower and practical:
+
+- **Apple Pay requires domain verification.** Without it the button can fail in a way that
+  looks like the shop is broken rather than like a configuration gap.
+- **The graded demonstration is the two-card test.** A payment page offering five routes,
+  four of which are irrelevant to what is being shown, invites a reviewer's click to go
+  somewhere unhelpful.
+- A demonstration shop that never ships has no reason to offer buy-now-pay-later.
+
+**Verify empirically rather than assuming.** Card wallets — Apple Pay, Google Pay, Link —
+are card-backed and may still appear even with `payment_method_types: ['card']`. That is
+acceptable, since they behave identically for our purposes. What must be confirmed against
+the live sandbox is that Klarna and Amazon Pay are gone and that plain card entry still
+works, because the two-card test depends on it.
 
 **No phone number.** `phone_number_collection` is available and deliberately not used: we
 have no purpose for a phone number, and collecting data without a purpose is exactly the
@@ -93,6 +117,55 @@ the existing error handling rather than surfacing as an unhandled 500.
 `managed_payments: { enabled: false }` stays. Whether it interacts with shipping is
 **unverified** — the implementation must test session creation against the real sandbox
 rather than assume, exactly as was done when that flag was first added.
+
+## 4a. Sizes
+
+Every shirt is available in **S, M, L, XL**. The customer picks one on the product page,
+before checkout.
+
+### Where the size is chosen, and why there
+
+The customer chooses on **our product page**, not at Stripe. Two alternatives were
+considered and rejected:
+
+- **Stripe `custom_fields` with a dropdown** would need no schema change at all, and is
+  wrong: it puts a product decision inside the payment page, after the customer has left the
+  shop, where it cannot be validated against what we actually offer and reads as an
+  afterthought.
+- **A full variant model** — each size its own record with its own price and stock — is what
+  a real shop needs and is unjustified here. Every size costs the same and there is no
+  stock. Build it when one of those stops being true.
+
+### The size list is an application constant
+
+`SIZES = ['S', 'M', 'L', 'XL'] as const` in `src/lib/constants.ts`, alongside `CURRENCY`,
+for the same reason: it is a property of the catalogue rather than of any one product.
+
+**Deliberately not a per-product field.** A `sizes` select on `products` would let the owner
+mark one shirt as L-and-XL-only, which is a real feature — and every shirt in this shop comes
+in all four. Adding the field now buys nothing and adds a validation path, a migration, and
+an admin control that always has the same value. Add it when a shirt does not come in all
+sizes.
+
+### Flow
+
+1. The product page renders a size selector, defaulting to **M**. No size, no purchase: the
+   Buy button is disabled until one is chosen, so the request cannot be malformed by
+   accident.
+2. `POST /shop/checkout` accepts `{ productId, size }` and **validates `size` against
+   `SIZES` server-side.** An absent or unrecognised size is rejected with 400, no Stripe
+   session and no order row — the same shape as the existing sold-out and missing-id
+   guards. The client is not trusted about the size any more than it is trusted about the
+   price.
+3. The Stripe line item's `product_data.name` becomes `"<product name> — <size>"`, so the
+   size is visible on the payment page, in Stripe's dashboard, and on the customer's
+   receipt.
+4. The order's line item stores `sizeSnapshot`, alongside the existing name and price
+   snapshots and for the same reason: it records what was actually ordered, independent of
+   anything that changes later.
+
+The size is what the owner needs in order to print the right shirt, so it belongs in the
+admin list view — see §7.
 
 ## 5. Webhook: read the right field
 
@@ -166,7 +239,9 @@ guarantee and the one worth writing first.
 ## 7. Admin: an order the owner can actually work
 
 `Orders.admin.defaultColumns` gains `fulfilmentStatus` and `shippingName` so the list view
-answers "what do I need to send, and to whom" without opening each record.
+answers "what do I need to send, and to whom" without opening each record. The size lives on
+the line item rather than the order, so it is visible one click in — acceptable, since the
+owner must open the order for the address anyway.
 
 No custom admin components. Payload generates the edit view from the fields, and the
 field-level access above means the owner sees the money and status fields as read-only
@@ -290,13 +365,21 @@ than documenting a manual process honestly.
 - **Marking Vercel env vars sensitive.** The security review flagged that `PAYLOAD_SECRET`
   being readable permits admin session forgery. Fixing it means abandoning the prebuilt
   deploy pattern; it deserves its own decision.
-- **Sizes.** `custom_fields` could carry one as a dropdown without a variant model, which is
-  tempting and wrong to bundle here — it changes what a product *is*.
+- **Product variants.** Sizes are now in scope (§4a) as a chosen attribute of a purchase.
+  A true variant model — per-size prices, per-size stock, per-product size availability — is
+  not, and should wait until a shirt exists that does not come in all four sizes or does not
+  cost the same in each.
 
 ## 14. Testing
 
-- **Checkout** — session creation includes `shipping_address_collection` and
-  `consent_collection`; existing tests keep passing.
+- **Checkout** — session creation includes `shipping_address_collection`,
+  `consent_collection` and `payment_method_types: ['card']`; existing tests keep passing.
+- **Size validation** — a valid size is accepted and reaches the Stripe line item name and
+  the order's `sizeSnapshot`; a **missing** size is rejected with 400; an **invented** size
+  (`'XXL'`, `'<script>'`, an empty string) is rejected with 400. In every rejection, no
+  Stripe session is created and no order row is written. This is the same shape as the
+  existing price test: the point is to prove the server does not trust the client, so the
+  invalid-size case matters more than the valid one.
 - **Webhook** — a fixture event carrying `collected_information.shipping_details` results in
   the address being stored. **A fixture using the old top-level `shipping_details` must
   result in no address being stored**, proving we read the correct field rather than
