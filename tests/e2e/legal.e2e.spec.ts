@@ -23,3 +23,10 @@ test('the admin panel has no storefront chrome', async ({ page }) => {
   await expect(page.getByRole('link', { name: /legal/i })).toHaveCount(0)
   await expect(page.getByRole('contentinfo')).toHaveCount(0)
 })
+
+test('the footer carries the copyright line', async ({ page }) => {
+  await page.goto('/')
+  // Fixed year, not the current one: this is a dated coursework demonstration,
+  // not a shop that will still be running next year.
+  await expect(page.getByRole('contentinfo')).toContainText('Overprint © 2026')
+})
