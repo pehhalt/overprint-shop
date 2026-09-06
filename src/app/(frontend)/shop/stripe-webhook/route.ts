@@ -34,7 +34,16 @@ export async function POST(req: Request) {
       process.env.STRIPE_WEBHOOK_SECRET as string,
     )
   } catch (error) {
-    console.error('Stripe webhook signature verification failed', error)
+    // Only the message. Stripe's StripeSignatureVerificationError carries the
+    // raw request body on `error.payload`, and console.error prints an error's
+    // own properties — so logging the object writes the customer's email, name
+    // and shipping address into the platform log on every failed delivery.
+    // Those logs are outside the reach of erase:order and prune:orders, so the
+    // data would survive an erasure request.
+    console.error(
+      'Stripe webhook signature verification failed',
+      error instanceof Error ? error.message : 'unknown error',
+    )
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 

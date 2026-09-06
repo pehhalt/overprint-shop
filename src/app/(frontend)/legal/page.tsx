@@ -61,20 +61,23 @@ export default function LegalPage() {
       <p className="mt-2 text-neutral-700">
         Data is stored in AWS eu-west-1, with serverless functions pinned to the dub1 region. Our
         retention targets: unpaid orders are removed after 30 days, and paid orders are kept for 2
-        years, after which they are redacted — their identity details (email, name, address)
-        cleared, leaving only the amount and date as a commercial record. Enforcement is manual and
-        operator-initiated: an operator runs a maintenance script by hand to apply these limits.
-        Nothing is purged or redacted automatically, and no recurring schedule does this for them.
+        years, after which they are redacted. Redaction clears your email, name and address. It
+        keeps the amount, the date, what was ordered, and the Stripe reference for the payment —
+        so be aware that a redacted order is not fully anonymous: we, and Stripe, can still use
+        that reference to connect the record back to you. Enforcement is manual and
+        operator-initiated. Nothing is purged or redacted automatically, and no recurring schedule
+        does this for them.
       </p>
       <p className="mt-2 text-neutral-700">
         To exercise your rights of access, rectification, erasure, or portability, email the
         address above. None of these is self-service or automated: an operator with database
-        access acts on your request by hand. Access, portability and erasure each have a
-        maintenance script the operator runs. Rectification has none — the fields holding your
-        name, email and address are deliberately locked against editing from the admin panel and
-        the API, so a correction is made by the operator directly against the database. We cannot
-        erase data held by Stripe: it is an independent controller with its own retention
-        obligations, so you will need to contact Stripe directly for that.
+        access carries out every request by hand, and the fields holding your name, email and
+        address are deliberately locked against editing through the admin panel and the API, so
+        even a correction is made directly against the database. We aim to respond within one
+        month. We cannot erase data held by Stripe: it is an independent controller with its own
+        retention obligations, so you will need to contact Stripe directly for that. If you think
+        we have handled your data badly, you can complain to a data protection supervisory
+        authority in the EU country where you live.
       </p>
 
       <h2 className="mt-8 text-lg font-semibold">Not legal advice</h2>
