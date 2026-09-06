@@ -101,3 +101,23 @@ test('nothing is marked current on the start page, which the logo owns', async (
     'page',
   )
 })
+
+test('the wordmark carries the tagline', async ({ page }) => {
+  await page.goto('/')
+  // Either apostrophe: the page renders the typographic one, and a test that
+  // pinned the exact character would fail confusingly if that were ever changed.
+  await expect(page.getByRole('banner').getByText(/Get my band['’]s tees/)).toBeVisible()
+})
+
+// Measured rather than asserted on a class name: what matters is that the pages
+// end up the same width, not which utility produced it.
+test('the legal page is as wide as the catalogue', async ({ page }) => {
+  await page.goto('/products')
+  const catalogue = await page.locator('main').boundingBox()
+
+  await page.goto('/legal')
+  const legal = await page.locator('main').boundingBox()
+
+  expect(Math.round(legal!.width)).toBe(Math.round(catalogue!.width))
+  expect(Math.round(legal!.x)).toBe(Math.round(catalogue!.x))
+})

@@ -14,9 +14,14 @@ export function SiteHeader() {
   return (
     <header className="border-b bg-neutral-50">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-8 py-4">
-        <Link href="/" className="text-3xl font-extrabold tracking-tight text-neutral-900">
-          Over<span className="text-red-600">Print</span>
-        </Link>
+        <div>
+          <Link href="/" className="text-3xl font-extrabold tracking-tight text-neutral-900">
+            Over<span className="text-red-600">Print</span>
+          </Link>
+          {/* Outside the link, so the link's accessible name stays "OverPrint"
+              rather than swallowing the tagline with it. */}
+          <p className="text-xs tracking-wide text-neutral-600">Get my band&rsquo;s tees</p>
+        </div>
 
         <SiteNav />
       </div>

@@ -1,7 +1,7 @@
 import { getPayload } from 'payload'
 import configPromise from '@payload-config'
 import Link from 'next/link'
-import { formatPrice, SHOP_NAME } from '@/lib/constants'
+import { formatPrice } from '@/lib/constants'
 import { ProductImage } from '../ProductImage'
 
 export const dynamic = 'force-dynamic'
@@ -16,7 +16,7 @@ export default async function CataloguePage() {
 
   return (
     <main className="mx-auto max-w-4xl p-8">
-      <h1 className="text-3xl font-bold">{SHOP_NAME}</h1>
+      <h1 className="text-3xl font-bold">T-Shirts</h1>
       <p className="mt-2 text-neutral-600">Printed to order. Nothing sits in a warehouse.</p>
 
       <ul className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
