@@ -2,15 +2,16 @@
 // later round.
 //
 // The banner sits in the same column as the header and the catalogue rather
-// than running full-bleed, so the page keeps one width on a wide monitor and
-// the image is never scaled past its natural size.
+// than running full-bleed — same max-w-4xl, same 32px side padding — so the
+// page holds one width on a wide monitor and the image is never scaled past
+// its natural size.
 //
 // A plain <img> rather than next/image, for the same reason the product images
 // use one: next/image re-encodes, and this project keeps original bytes. See
 // CLAUDE.md, "Never add image resizing".
 export default function StartPage() {
   return (
-    <main className="mx-auto max-w-4xl px-4 py-6">
+    <main className="mx-auto max-w-4xl px-8 py-6">
       <figure className="relative m-0">
         <img
           src="/shop-banner.png"
