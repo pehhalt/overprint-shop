@@ -48,6 +48,7 @@ function fixtureOrderPayload(stripeCheckoutSessionId: string) {
       {
         nameSnapshot: 'Task9 Fixture Shirt',
         unitAmountSnapshot: 2500,
+        sizeSnapshot: 'M',
         quantity: 1,
       },
     ],

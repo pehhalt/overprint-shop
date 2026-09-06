@@ -97,6 +97,7 @@ export async function POST(req: Request) {
             product: product.id,
             nameSnapshot: product.name,
             unitAmountSnapshot: product.price,
+            sizeSnapshot: size,
             quantity: 1,
           },
         ],

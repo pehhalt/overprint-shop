@@ -65,6 +65,12 @@ export const Orders: CollectionConfig = {
           required: true,
           admin: { description: 'The unit price actually charged, in cents.' },
         },
+        {
+          name: 'sizeSnapshot',
+          type: 'text',
+          required: true,
+          admin: { description: 'The size chosen at purchase. What the owner prints.' },
+        },
         { name: 'quantity', type: 'number', required: true, defaultValue: 1 },
       ],
     },

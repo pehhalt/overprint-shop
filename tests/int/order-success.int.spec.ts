@@ -70,6 +70,7 @@ function fixtureOrderData(
       {
         nameSnapshot: SNAPSHOT_NAME,
         unitAmountSnapshot: SNAPSHOT_UNIT_AMOUNT,
+        sizeSnapshot: 'M',
         quantity: 2,
       },
     ],

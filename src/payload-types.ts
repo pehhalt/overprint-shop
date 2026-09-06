@@ -220,6 +220,10 @@ export interface Order {
      * The unit price actually charged, in cents.
      */
     unitAmountSnapshot: number;
+    /**
+     * The size chosen at purchase. What the owner prints.
+     */
+    sizeSnapshot: string;
     quantity: number;
     id?: string | null;
   }[];
@@ -379,6 +383,7 @@ export interface OrdersSelect<T extends boolean = true> {
         product?: T;
         nameSnapshot?: T;
         unitAmountSnapshot?: T;
+        sizeSnapshot?: T;
         quantity?: T;
         id?: T;
       };

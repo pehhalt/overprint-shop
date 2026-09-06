@@ -49,6 +49,7 @@ const SESSION_ID_PRICE_TEST = 'task10-fixture-cs_test_charges_db_price'
 const SESSION_ID_ORDER_TEST = 'task10-fixture-cs_test_writes_pending_order'
 const SESSION_ID_MANAGED_PAYMENTS_TEST = 'task10-fixture-cs_test_managed_payments_disabled'
 const SESSION_ID_SIZE_TEST = 'task10-fixture-cs_test_size_in_line_item'
+const SESSION_ID_SIZE_SNAPSHOT_TEST = 'task10-fixture-cs_test_size_snapshot'
 
 function request(body: unknown) {
   return new Request('http://localhost:3000/shop/checkout', {
@@ -133,6 +134,7 @@ describe('POST /shop/checkout (Task 10)', () => {
             SESSION_ID_ORDER_TEST,
             SESSION_ID_MANAGED_PAYMENTS_TEST,
             SESSION_ID_SIZE_TEST,
+            SESSION_ID_SIZE_SNAPSHOT_TEST,
           ],
         },
       },
@@ -286,6 +288,23 @@ describe('POST /shop/checkout (Task 10)', () => {
 
     const args = sessionsCreate.mock.calls[0][0]
     expect(args.line_items[0].price_data.product_data.name).toBe(`${AVAILABLE_NAME} — L`)
+  })
+
+  it('snapshots the chosen size on the order line', async () => {
+    sessionsCreate.mockResolvedValue({
+      id: SESSION_ID_SIZE_SNAPSHOT_TEST,
+      url: 'https://checkout.stripe.com/snapshot',
+    })
+
+    await POST(request({ productId: String(availableProductId), size: 'XL' }))
+
+    const found = await payload.find({
+      collection: 'orders',
+      where: { stripeCheckoutSessionId: { equals: SESSION_ID_SIZE_SNAPSHOT_TEST } },
+      overrideAccess: true,
+    })
+    expect(found.totalDocs).toBe(1)
+    expect(found.docs[0].items[0].sizeSnapshot).toBe('XL')
   })
 
   it('returns 502 with a JSON error body when Stripe fails, and writes no order', async () => {

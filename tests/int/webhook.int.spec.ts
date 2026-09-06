@@ -124,6 +124,7 @@ function fixtureOrderData(sessionId: string) {
       {
         nameSnapshot: 'Task11 Fixture Shirt',
         unitAmountSnapshot: 4200,
+        sizeSnapshot: 'M',
         quantity: 1,
       },
     ],
